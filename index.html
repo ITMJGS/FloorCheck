@@ -412,34 +412,55 @@ function handleScan(text){
   renderPatrol();
 }
 
+/* Status pemindai html5-qrcode: 1 = belum jalan, 2 = memindai, 3 = jeda */
+let camBusy = false;
+function camScanning(){
+  try{ return !!S.scanner && S.scanner.getState() !== 1; }catch(e){ return false; }
+}
+async function stopScanner(sc){
+  if (!sc) return;
+  try{ if (sc.getState() !== 1) await sc.stop(); }catch(e){}
+}
 async function openCamera(){
+  if (camBusy) return;                       // cegah dibuka dua kali bersamaan
+  camBusy = true;
+  const btn = $('#btn-cam');
+  btn.disabled = true; btn.textContent = 'Membuka kamera…';
   try{
-    if (!S.scanner) S.scanner = new Html5Qrcode('reader');
-    await S.scanner.start(
+    await closeCamera();                     // bersihkan sisa sesi sebelumnya
+    const sc = new Html5Qrcode('reader');
+    S.scanner = sc;
+    await sc.start(
       { facingMode:'environment' },
       { fps:10, qrbox:(w,h) => { const m = Math.floor(Math.min(w,h) * 0.7); return { width:m, height:m }; } },
       handleScan, () => {}
     );
-    $('#btn-cam').textContent = 'Tutup Kamera';
+    if (S.scanner !== sc){ await stopScanner(sc); return; }  // sudah ditutup saat sedang dibuka
+    btn.textContent = 'Tutup Kamera';
   }catch(err){
+    await closeCamera();
     const name = (err && err.name) || String(err);
     if (/NotAllowed|Permission/i.test(name)) toast('Izin kamera ditolak. Izinkan kamera untuk situs ini, lalu muat ulang.', 'bad');
     else if (/NotFound|Overconstrained/i.test(name)) toast('Kamera belakang tidak ditemukan di perangkat ini.', 'bad');
     else if (/NotReadable/i.test(name)) toast('Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.', 'bad');
     else toast('Kamera tidak bisa dibuka (' + name + '). Pakai tombol "Foto QR".', 'bad');
+  }finally{
+    camBusy = false; btn.disabled = false;
+    if (!camScanning()) btn.textContent = 'Buka Kamera';
   }
 }
 async function closeCamera(){
-  try{ if (S.scanner && S.scanner.isScanning) await S.scanner.stop(); }catch(e){}
-  try{ S.scanner && S.scanner.clear(); }catch(e){}
-  $('#btn-cam').textContent = 'Buka Kamera';
+  const sc = S.scanner; S.scanner = null;
+  await stopScanner(sc);
+  const r = $('#reader'); if (r) r.innerHTML = '';
+  if (!camBusy) $('#btn-cam').textContent = 'Buka Kamera';
 }
 
 $('#btn-start').addEventListener('click', () => {
   S.patrol = { start:new Date().toISOString(), scans:{} };
   savePatrol(); renderPatrol(); openCamera();
 });
-$('#btn-cam').addEventListener('click', () => (S.scanner && S.scanner.isScanning) ? closeCamera() : openCamera());
+$('#btn-cam').addEventListener('click', () => camScanning() ? closeCamera() : openCamera());
 $('#file-qr').addEventListener('change', async e => {
   const file = e.target.files[0]; e.target.value = '';
   if (!file) return;
