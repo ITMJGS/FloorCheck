@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room Service Floor Check</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#f3f5f8; --card:#fff; --ink:#1b2333; --muted:#6b7487; --line:#e3e7ee;
+    --brand:#16324f; --brand-ink:#fff; --accent:#c99a3c;
+    --ok:#1f8a5b; --ok-bg:#e6f5ee; --warn:#b4690e; --warn-bg:#fdf1e1; --bad:#c0392b; --bad-bg:#fbe9e7;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  .hidden{display:none!important}
+  button,input,select{font:inherit}
+  .topbar{background:var(--brand);color:var(--brand-ink);padding:12px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10}
+  .topbar .brand{font-weight:700;letter-spacing:.2px;flex:1}
+  .topbar .brand small{display:block;font-weight:400;opacity:.75;font-size:12px}
+  .tabs{display:flex;gap:4px;background:var(--brand);padding:0 12px 10px;overflow-x:auto;position:sticky;top:56px;z-index:9}
+  .tabs button{border:0;background:transparent;color:#c9d4e2;padding:8px 14px;border-radius:999px;white-space:nowrap;cursor:pointer}
+  .tabs button.active{background:#fff;color:var(--brand);font-weight:600}
+  main{max-width:760px;margin:0 auto;padding:16px 16px 110px}
+  .card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,30,50,.06)}
+  h2{font-size:18px;margin:0 0 12px} h3{font-size:15px;margin:0 0 8px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+  input:focus,select:focus{outline:2px solid var(--accent);border-color:transparent}
+  .btn{border:0;border-radius:10px;padding:11px 16px;cursor:pointer;font-weight:600;background:var(--line);color:var(--ink)}
+  .btn.primary{background:var(--brand);color:#fff}
+  .btn.accent{background:var(--accent);color:#fff}
+  .btn.ok{background:var(--ok);color:#fff}
+  .btn.danger{background:var(--bad-bg);color:var(--bad)}
+  .btn.ghost{background:transparent;color:inherit;border:1px solid rgba(255,255,255,.35);padding:7px 12px}
+  .btn.sm{padding:6px 10px;font-size:13px}
+  .btn:disabled{opacity:.55;cursor:wait}
+  .row{display:flex;gap:10px;flex-wrap:wrap} .row>*{flex:1}
+  .muted{color:var(--muted);font-size:13px}
+  .link{background:none;border:0;color:var(--brand);text-decoration:underline;cursor:pointer;padding:0}
+  .login-wrap{max-width:380px;margin:8vh auto 0}
+  .login-logo{text-align:center;margin-bottom:18px}
+  .login-logo .mark{width:56px;height:56px;border-radius:16px;background:var(--brand);color:var(--accent);display:inline-grid;place-items:center;font-size:26px;font-weight:800}
+  .login-logo h1{font-size:20px;margin:10px 0 2px}
+  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .meta div{background:var(--bg);border-radius:10px;padding:8px 10px}
+  .meta b{display:block;font-size:14px} .meta span{font-size:12px;color:var(--muted)}
+  .progress{height:10px;background:var(--line);border-radius:999px;overflow:hidden}
+  .progress i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
+  #reader{width:100%;border-radius:12px;overflow:hidden;background:#000;margin-top:12px}
+  #reader:empty{display:none}
+  .last-scan{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px}
+  .last-scan.ok{background:var(--ok-bg);color:var(--ok)} .last-scan.warn{background:var(--warn-bg);color:var(--warn)} .last-scan.bad{background:var(--bad-bg);color:var(--bad)}
+  .floor{margin-bottom:10px}
+  .floor-head{display:flex;justify-content:space-between;font-weight:600;font-size:14px;margin-bottom:6px}
+  .chips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .chip{border:1px dashed var(--line);border-radius:10px;padding:8px;font-size:12.5px;text-align:center;color:var(--muted);background:#fafbfc}
+  .chip.done{border:1px solid transparent;background:var(--ok-bg);color:var(--ok);font-weight:600}
+  .chip small{display:block;font-weight:400;font-size:11px;margin-top:2px}
+  .bottombar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;justify-content:center;z-index:8}
+  .bottombar .btn{flex:1;max-width:360px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;color:var(--muted);font-weight:600}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
+  .b-aktif{background:var(--ok-bg);color:var(--ok)} .b-menunggu{background:var(--warn-bg);color:var(--warn)} .b-nonaktif{background:var(--bad-bg);color:var(--bad)}
+  .b-role{background:#e8eef6;color:var(--brand)}
+  .table-wrap{overflow-x:auto}
+  .report{border-bottom:1px solid var(--line);padding:10px 0}
+  .report:last-child{border:0}
+  .report .top{display:flex;justify-content:space-between;gap:8px}
+  .report details{margin-top:6px;font-size:13px;color:var(--muted)}
+  .qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px}
+  .qr-card{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center;background:#fff;break-inside:avoid}
+  .qr-card .qr{display:flex;justify-content:center}
+  .qr-card .qr img,.qr-card .qr canvas{width:130px!important;height:130px!important}
+  .qr-card b{display:block;margin-top:8px;font-size:13px}
+  #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50}
+  #toast.show{opacity:1} #toast.bad{background:var(--bad)} #toast.ok{background:var(--ok)}
+  @media (max-width:420px){.chips{grid-template-columns:repeat(2,1fr)}.meta{grid-template-columns:1fr 1fr}}
+  @media print{
+    body{background:#fff} .topbar,.tabs,.bottombar,#toast,.no-print{display:none!important}
+    main{max-width:none;padding:0} .card{box-shadow:none;padding:0}
+    .qr-grid{grid-template-columns:repeat(4,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<header id="topbar" class="topbar hidden">
+  <div class="brand">Room Service Floor Check<small id="who"></small></div>
+  <button class="btn ghost sm" id="btn-logout">Keluar</button>
+</header>
+<nav id="tabs" class="tabs hidden"></nav>
+
+<main>
+  <!-- LOGIN / DAFTAR -->
+  <section id="v-login" class="hidden">
+    <div class="login-wrap">
+      <div class="login-logo"><div class="mark">RS</div><h1>Room Service Floor Check</h1><div class="muted">Patroli lantai dengan scan QR</div></div>
+      <form class="card" id="f-login">
+        <h2>Masuk</h2>
+        <label>Username</label><input id="l-user" autocomplete="username" required>
+        <label>Password</label><input id="l-pass" type="password" autocomplete="current-password" required>
+        <div style="margin-top:16px"><button class="btn primary" style="width:100%">Masuk</button></div>
+        <p class="muted" style="text-align:center;margin-bottom:0">Belum punya akun? <button type="button" class="link" data-go="register">Daftar</button></p>
+      </form>
+      <form class="card hidden" id="f-register">
+        <h2>Daftar akun</h2>
+        <p class="muted" style="margin-top:0">Akun baru harus disetujui admin sebelum bisa login.</p>
+        <label>Nama lengkap</label><input id="r-nama" required>
+        <label>Username</label><input id="r-user" autocomplete="username" required>
+        <label>Password (min. 6 karakter)</label><input id="r-pass" type="password" autocomplete="new-password" required>
+        <div style="margin-top:16px"><button class="btn primary" style="width:100%">Kirim pendaftaran</button></div>
+        <p class="muted" style="text-align:center;margin-bottom:0"><button type="button" class="link" data-go="login">Kembali ke login</button></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- PATROLI -->
+  <section id="v-patrol" class="hidden">
+    <div class="card" id="patrol-idle">
+      <h2>Patroli lantai</h2>
+      <p class="muted" id="cp-count">Memuat titik cek…</p>
+      <button class="btn primary" id="btn-start" style="width:100%" disabled>Mulai Patroli</button>
+    </div>
+
+    <div id="patrol-active" class="hidden">
+      <div class="card">
+        <div class="meta">
+          <div><span>Petugas</span><b id="m-nama"></b></div>
+          <div><span>Tanggal</span><b id="m-tgl"></b></div>
+          <div><span>Mulai</span><b id="m-jam"></b></div>
+        </div>
+        <div class="row" style="align-items:center;margin-bottom:6px">
+          <b id="m-progress-text" style="flex:none"></b><span class="muted" style="text-align:right">titik sudah di-scan</span>
+        </div>
+        <div class="progress"><i id="m-progress"></i></div>
+
+        <div class="row" style="margin-top:14px">
+          <button class="btn accent" id="btn-cam">Buka Kamera</button>
+          <label class="btn" style="margin:0;text-align:center;color:var(--ink);font-size:inherit">Foto QR
+            <input type="file" id="file-qr" accept="image/*" capture="environment" class="hidden">
+          </label>
+        </div>
+        <div id="reader"></div>
+        <div id="reader-file" class="hidden"></div>
+        <div id="last-scan" class="last-scan hidden"></div>
+      </div>
+
+      <div class="card"><h3>Daftar titik cek</h3><div id="cp-list"></div></div>
+    </div>
+  </section>
+
+  <!-- LAPORAN -->
+  <section id="v-reports" class="hidden">
+    <div class="card">
+      <div class="row" style="align-items:center"><h2 style="margin:0">Laporan patroli</h2>
+        <button class="btn sm" id="btn-reload-rep" style="flex:none">Muat ulang</button></div>
+      <p class="muted">100 patroli terakhir, terbaru di atas.</p>
+      <div id="rep-list"></div>
+    </div>
+  </section>
+
+  <!-- PENGGUNA -->
+  <section id="v-users" class="hidden">
+    <form class="card" id="f-user">
+      <h2 id="u-title">Tambah pengguna</h2>
+      <div class="row">
+        <div><label>Username</label><input id="u-username" required></div>
+        <div><label>Nama</label><input id="u-nama" required></div>
+      </div>
+      <div class="row">
+        <div><label>Role</label><select id="u-role">
+          <option value="petugas">Petugas</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select></div>
+        <div><label>Status</label><select id="u-status">
+          <option>Aktif</option><option>Nonaktif</option><option>Menunggu</option></select></div>
+      </div>
+      <label id="u-pass-label">Password</label><input id="u-password" type="password" autocomplete="new-password">
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary">Simpan</button>
+        <button type="button" class="btn" id="btn-u-reset">Batal</button>
+      </div>
+    </form>
+    <div class="card">
+      <div class="row" style="align-items:center"><h2 style="margin:0">Daftar pengguna</h2>
+        <button class="btn sm" id="btn-reload-users" style="flex:none">Muat ulang</button></div>
+      <div class="table-wrap" style="margin-top:10px"><table>
+        <thead><tr><th>Pengguna</th><th>Role</th><th>Status</th><th></th></tr></thead>
+        <tbody id="u-tbody"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- QR CODE -->
+  <section id="v-qr" class="hidden">
+    <div class="card">
+      <div class="no-print">
+        <h2>QR Code titik cek</h2>
+        <p class="muted">Isi tiap QR sama persis dengan judul kolom di spreadsheet. Cetak lalu tempel di masing-masing titik.</p>
+        <div class="row"><button class="btn primary" id="btn-qr-gen">Tampilkan QR</button><button class="btn" id="btn-qr-print">Cetak</button></div>
+      </div>
+      <div class="qr-grid" id="qr-grid"></div>
+    </div>
+  </section>
+</main>
+
+<div id="patrol-bar" class="bottombar hidden">
+  <button class="btn danger" id="btn-cancel">Batalkan</button>
+  <button class="btn ok" id="btn-submit">Kirim</button>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const S = { token:null, user:null, cps:[], patrol:null, scanner:null, fileScanner:null, lastText:'', lastAt:0, view:null };
+const ROLE_LABEL = { admin:'Admin', supervisor:'Supervisor', petugas:'Petugas' };
+
+/* ---------- util ---------- */
+const store = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+const norm = s => String(s == null ? '' : s).trim().replace(/\s+/g,' ').toLowerCase();
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtTime = iso => new Date(iso).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+const fmtDate = iso => new Date(iso).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+
+let toastTimer;
+function toast(msg, type){
+  const t = $('#toast'); t.textContent = msg; t.className = 'show ' + (type||'');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=> t.className = '', 3200);
+}
+function cleanErr(m){ return String(m||'').replace(/^(Error|Exception):\s*/,'').replace(/^SESSION:\s*/,''); }
+
+/* =====================================================================
+   GANTI dengan Web app URL dari Apps Script (Deploy → Manage deployments)
+   Contoh: https://script.google.com/macros/s/AKfycb.../exec
+   ===================================================================== */
+const API_URL = 'TEMPEL_URL_WEB_APP_DI_SINI';
+
+async function api(fn, ...args){
+  let res, j;
+  try{
+    res = await fetch(API_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body:JSON.stringify({ fn, args }),
+      redirect:'follow'
+    });
+  }catch(e){ throw new Error('Tidak bisa terhubung ke server. Cek internet atau API_URL.'); }
+  try{ j = await res.json(); }
+  catch(e){ throw new Error('Server tidak merespons dengan benar. Pastikan deploy Apps Script aksesnya "Anyone".'); }
+  if (!j.ok){
+    const raw = j.error || 'Terjadi kesalahan.';
+    if (raw.indexOf('SESSION') >= 0) forceLogout(cleanErr(raw));
+    throw new Error(cleanErr(raw));
+  }
+  return j.data;
+}
+async function withBusy(btn, fn){
+  if (btn) btn.disabled = true;
+  try { return await fn(); } finally { if (btn) btn.disabled = false; }
+}
+function beep(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 880; g.gain.value = 0.15; o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.12);
+  }catch(e){}
+  try{ navigator.vibrate && navigator.vibrate(80); }catch(e){}
+}
+
+/* ---------- views ---------- */
+function show(view){
+  ['login','patrol','reports','users','qr'].forEach(v => $('#v-'+v).classList.toggle('hidden', v !== view));
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  if (S.view === 'patrol' && view !== 'patrol') closeCamera();
+  S.view = view;
+  $('#patrol-bar').classList.toggle('hidden', !(view === 'patrol' && S.patrol));
+  if (view === 'reports') loadReports();
+  if (view === 'users') loadUsers();
+}
+
+function enterApp(){
+  store.set('rsfc_token', S.token);
+  $('#topbar').classList.remove('hidden');
+  $('#who').textContent = S.user.nama + ' · ' + (ROLE_LABEL[S.user.role] || S.user.role);
+  const tabs = [['patrol','Patroli']];
+  if (S.user.role === 'admin' || S.user.role === 'supervisor') tabs.push(['reports','Laporan']);
+  if (S.user.role === 'admin') tabs.push(['users','Pengguna'], ['qr','QR Code']);
+  const nav = $('#tabs');
+  nav.innerHTML = tabs.map(([v,l]) => `<button data-view="${v}">${l}</button>`).join('');
+  nav.classList.toggle('hidden', tabs.length < 2);
+  S.patrol = store.get('rsfc_patrol_' + S.user.username);
+  show('patrol');
+  loadCheckpoints();
+}
+
+function forceLogout(msg){
+  closeCamera();
+  store.del('rsfc_token');
+  S.token = null; S.user = null;
+  $('#topbar').classList.add('hidden'); $('#tabs').classList.add('hidden');
+  show('login');
+  if (msg) toast(msg, 'bad');
+}
+
+/* ---------- login / daftar ---------- */
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-go]');
+  if (go){ $('#f-login').classList.toggle('hidden', go.dataset.go !== 'login'); $('#f-register').classList.toggle('hidden', go.dataset.go !== 'register'); }
+  const tab = e.target.closest('#tabs button');
+  if (tab) show(tab.dataset.view);
+});
+
+$('#f-login').addEventListener('submit', e => {
+  e.preventDefault();
+  withBusy(e.submitter, async () => {
+    try{
+      const r = await api('apiLogin', $('#l-user').value.trim(), $('#l-pass').value);
+      S.token = r.token; S.user = r.user; $('#l-pass').value = '';
+      enterApp();
+    }catch(err){ toast(err.message, 'bad'); }
+  });
+});
+
+$('#f-register').addEventListener('submit', e => {
+  e.preventDefault();
+  withBusy(e.submitter, async () => {
+    try{
+      const msg = await api('apiRegister', $('#r-user').value.trim(), $('#r-nama').value.trim(), $('#r-pass').value);
+      e.target.reset(); toast(msg, 'ok');
+      $('#f-register').classList.add('hidden'); $('#f-login').classList.remove('hidden');
+    }catch(err){ toast(err.message, 'bad'); }
+  });
+});
+
+$('#btn-logout').addEventListener('click', async () => {
+  if (S.patrol && !confirm('Patroli yang belum dikirim tetap tersimpan di perangkat ini. Keluar sekarang?')) return;
+  try{ await api('apiLogout', S.token); }catch(e){}
+  forceLogout();
+});
+
+/* ---------- patroli ---------- */
+async function loadCheckpoints(){
+  try{
+    S.cps = await api('apiGetCheckpoints', S.token);
+    $('#cp-count').textContent = S.cps.length + ' titik cek siap. Tekan Mulai Patroli, lalu scan QR di setiap titik.';
+    $('#btn-start').disabled = !S.cps.length;
+    renderPatrol();
+  }catch(err){ $('#cp-count').textContent = 'Gagal memuat titik cek: ' + err.message; }
+}
+
+function savePatrol(){
+  if (S.patrol) store.set('rsfc_patrol_' + S.user.username, S.patrol);
+  else store.del('rsfc_patrol_' + S.user.username);
+}
+
+function groupCps(){
+  const groups = [], map = {};
+  S.cps.forEach(cp => {
+    const m = cp.match(/^(\S+)\s+(.+)$/);
+    const key = m ? m[1] : cp, label = m ? m[2] : cp;
+    if (!map[key]){ map[key] = { floor:key, items:[] }; groups.push(map[key]); }
+    map[key].items.push({ cp, label });
+  });
+  return groups;
+}
+
+function renderPatrol(){
+  const active = !!S.patrol;
+  $('#patrol-idle').classList.toggle('hidden', active);
+  $('#patrol-active').classList.toggle('hidden', !active);
+  $('#patrol-bar').classList.toggle('hidden', !(active && S.view === 'patrol'));
+  if (!active) return;
+  const scans = S.patrol.scans, done = Object.keys(scans).length, total = S.cps.length;
+  $('#m-nama').textContent = S.user.nama;
+  $('#m-tgl').textContent = fmtDate(S.patrol.start);
+  $('#m-jam').textContent = fmtTime(S.patrol.start);
+  $('#m-progress-text').textContent = done + ' / ' + total;
+  $('#m-progress').style.width = (total ? done / total * 100 : 0) + '%';
+  $('#btn-submit').textContent = 'Kirim (' + done + '/' + total + ')';
+  $('#cp-list').innerHTML = groupCps().map(g => {
+    const n = g.items.filter(i => scans[i.cp]).length;
+    const title = /^\d+$/.test(g.floor) ? 'Lantai ' + g.floor : g.floor;
+    return `<div class="floor"><div class="floor-head"><span>${esc(title)}</span><span class="muted">${n}/${g.items.length}</span></div>
+      <div class="chips">${g.items.map(i => scans[i.cp]
+        ? `<div class="chip done">✓ ${esc(i.label)}<small>${fmtTime(scans[i.cp])}</small></div>`
+        : `<div class="chip">${esc(i.label)}<small>belum</small></div>`).join('')}</div></div>`;
+  }).join('');
+}
+
+function setLastScan(msg, type){
+  const el = $('#last-scan'); el.textContent = msg; el.className = 'last-scan ' + type;
+}
+
+function handleScan(text){
+  const now = Date.now();
+  if (text === S.lastText && now - S.lastAt < 3000) return;
+  S.lastText = text; S.lastAt = now;
+  if (!S.patrol) return;
+  const cp = S.cps.find(c => norm(c) === norm(text));
+  if (!cp){ setLastScan('QR tidak dikenali: "' + text + '"', 'bad'); toast('QR bukan titik cek yang terdaftar', 'bad'); return; }
+  if (S.patrol.scans[cp]){ setLastScan(cp + ' sudah di-scan jam ' + fmtTime(S.patrol.scans[cp]), 'warn'); return; }
+  S.patrol.scans[cp] = new Date().toISOString();
+  savePatrol(); beep();
+  setLastScan('✓ ' + cp + ' tercatat jam ' + fmtTime(S.patrol.scans[cp]), 'ok');
+  renderPatrol();
+}
+
+async function openCamera(){
+  try{
+    if (!S.scanner) S.scanner = new Html5Qrcode('reader');
+    await S.scanner.start(
+      { facingMode:'environment' },
+      { fps:10, qrbox:(w,h) => { const m = Math.floor(Math.min(w,h) * 0.7); return { width:m, height:m }; } },
+      handleScan, () => {}
+    );
+    $('#btn-cam').textContent = 'Tutup Kamera';
+  }catch(err){
+    const name = (err && err.name) || String(err);
+    if (/NotAllowed|Permission/i.test(name)) toast('Izin kamera ditolak. Izinkan kamera untuk situs ini, lalu muat ulang.', 'bad');
+    else if (/NotFound|Overconstrained/i.test(name)) toast('Kamera belakang tidak ditemukan di perangkat ini.', 'bad');
+    else if (/NotReadable/i.test(name)) toast('Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.', 'bad');
+    else toast('Kamera tidak bisa dibuka (' + name + '). Pakai tombol "Foto QR".', 'bad');
+  }
+}
+async function closeCamera(){
+  try{ if (S.scanner && S.scanner.isScanning) await S.scanner.stop(); }catch(e){}
+  try{ S.scanner && S.scanner.clear(); }catch(e){}
+  $('#btn-cam').textContent = 'Buka Kamera';
+}
+
+$('#btn-start').addEventListener('click', () => {
+  S.patrol = { start:new Date().toISOString(), scans:{} };
+  savePatrol(); renderPatrol(); openCamera();
+});
+$('#btn-cam').addEventListener('click', () => (S.scanner && S.scanner.isScanning) ? closeCamera() : openCamera());
+$('#file-qr').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  try{
+    if (!S.fileScanner) S.fileScanner = new Html5Qrcode('reader-file');
+    handleScan(await S.fileScanner.scanFile(file, false));
+  }catch(err){ toast('QR tidak terbaca di foto. Coba lebih dekat & terang.', 'bad'); }
+});
+$('#btn-cancel').addEventListener('click', () => {
+  if (!confirm('Batalkan patroli ini? Semua hasil scan akan dihapus.')) return;
+  closeCamera(); S.patrol = null; savePatrol(); setLastScan('', 'hidden'); renderPatrol();
+});
+$('#btn-submit').addEventListener('click', e => {
+  const done = Object.keys(S.patrol.scans).length, total = S.cps.length;
+  if (!done) return toast('Belum ada titik yang di-scan.', 'bad');
+  if (done < total && !confirm('Baru ' + done + ' dari ' + total + ' titik yang di-scan. Tetap kirim?')) return;
+  withBusy(e.currentTarget, async () => {
+    try{
+      const r = await api('apiSubmitPatrol', S.token, S.patrol);
+      closeCamera(); S.patrol = null; savePatrol(); $('#last-scan').className = 'last-scan hidden';
+      renderPatrol();
+      toast('Terkirim ke spreadsheet (baris ' + r.row + ', ' + r.filled + '/' + r.total + ' titik).', 'ok');
+    }catch(err){ toast('Gagal kirim: ' + err.message + ' — data tetap tersimpan, coba lagi.', 'bad'); }
+  });
+});
+
+/* ---------- laporan ---------- */
+async function loadReports(){
+  const box = $('#rep-list'); box.innerHTML = '<p class="muted">Memuat…</p>';
+  try{
+    const rows = await api('apiReports', S.token, 100);
+    if (!rows.length){ box.innerHTML = '<p class="muted">Belum ada data patroli.</p>'; return; }
+    box.innerHTML = rows.map(r => {
+      const full = r.filled === r.total;
+      return `<div class="report"><div class="top"><div><b>${esc(r.nama)}</b><div class="muted">${esc(r.tanggal)} · mulai ${esc(r.jam)}</div></div>
+        <span class="badge ${full ? 'b-aktif' : 'b-menunggu'}">${r.filled}/${r.total}</span></div>
+        ${full ? '' : `<details><summary>${r.missing.length} titik belum di-scan</summary>${r.missing.map(esc).join(', ')}</details>`}</div>`;
+    }).join('');
+  }catch(err){ box.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; }
+}
+$('#btn-reload-rep').addEventListener('click', loadReports);
+
+/* ---------- pengguna ---------- */
+let usersCache = [];
+async function loadUsers(){
+  const tb = $('#u-tbody'); tb.innerHTML = '<tr><td colspan="4" class="muted">Memuat…</td></tr>';
+  try{
+    usersCache = await api('apiListUsers', S.token);
+    const order = { menunggu:0, aktif:1, nonaktif:2 };
+    usersCache.sort((a,b) => (order[norm(a.status)] ?? 3) - (order[norm(b.status)] ?? 3));
+    tb.innerHTML = usersCache.map(u => {
+      const st = norm(u.status);
+      return `<tr><td><b>${esc(u.nama)}</b><div class="muted">${esc(u.username)}</div></td>
+        <td><span class="badge b-role">${esc(ROLE_LABEL[u.role] || u.role)}</span></td>
+        <td><span class="badge b-${esc(st)}">${esc(u.status)}</span></td>
+        <td style="white-space:nowrap;text-align:right">
+          ${st === 'menunggu' ? `<button class="btn ok sm" data-act="approve" data-u="${esc(u.username)}">Setujui</button>` : ''}
+          <button class="btn sm" data-act="edit" data-u="${esc(u.username)}">Ubah</button>
+          <button class="btn danger sm" data-act="del" data-u="${esc(u.username)}">Hapus</button></td></tr>`;
+    }).join('') || '<tr><td colspan="4" class="muted">Belum ada pengguna.</td></tr>';
+  }catch(err){ tb.innerHTML = '<tr><td colspan="4" class="muted">' + esc(err.message) + '</td></tr>'; }
+}
+
+function resetUserForm(){
+  $('#f-user').reset(); $('#u-username').readOnly = false;
+  $('#u-title').textContent = 'Tambah pengguna'; $('#u-pass-label').textContent = 'Password';
+}
+$('#btn-u-reset').addEventListener('click', resetUserForm);
+$('#btn-reload-users').addEventListener('click', loadUsers);
+
+$('#u-tbody').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const u = usersCache.find(x => x.username === b.dataset.u); if (!u) return;
+  if (b.dataset.act === 'edit'){
+    $('#u-username').value = u.username; $('#u-username').readOnly = true;
+    $('#u-nama').value = u.nama; $('#u-role').value = u.role; $('#u-status').value = u.status || 'Aktif';
+    $('#u-password').value = ''; $('#u-title').textContent = 'Ubah pengguna';
+    $('#u-pass-label').textContent = 'Password baru (kosongkan jika tidak diganti)';
+    window.scrollTo({ top:0, behavior:'smooth' });
+    return;
+  }
+  await withBusy(b, async () => {
+    try{
+      let msg;
+      if (b.dataset.act === 'approve') msg = await api('apiSaveUser', S.token, { ...u, status:'Aktif' });
+      if (b.dataset.act === 'del'){ if (!confirm('Hapus pengguna ' + u.username + '?')) return; msg = await api('apiDeleteUser', S.token, u.username); }
+      toast(msg, 'ok'); loadUsers();
+    }catch(err){ toast(err.message, 'bad'); }
+  });
+});
+
+$('#f-user').addEventListener('submit', e => {
+  e.preventDefault();
+  withBusy(e.submitter, async () => {
+    try{
+      const msg = await api('apiSaveUser', S.token, {
+        username:$('#u-username').value.trim(), nama:$('#u-nama').value.trim(),
+        role:$('#u-role').value, status:$('#u-status').value, password:$('#u-password').value
+      });
+      toast(msg, 'ok'); resetUserForm(); loadUsers();
+    }catch(err){ toast(err.message, 'bad'); }
+  });
+});
+
+/* ---------- QR code ---------- */
+$('#btn-qr-gen').addEventListener('click', () => {
+  const grid = $('#qr-grid'); grid.innerHTML = '';
+  if (!S.cps.length) return toast('Titik cek belum dimuat.', 'bad');
+  S.cps.forEach(cp => {
+    const card = document.createElement('div'); card.className = 'qr-card';
+    const q = document.createElement('div'); q.className = 'qr';
+    const label = document.createElement('b'); label.textContent = cp;
+    card.append(q, label); grid.append(card);
+    new QRCode(q, { text:cp, width:260, height:260, correctLevel:QRCode.CorrectLevel.M });
+  });
+});
+$('#btn-qr-print').addEventListener('click', () => {
+  if (!$('#qr-grid').children.length) $('#btn-qr-gen').click();
+  setTimeout(() => window.print(), 400);
+});
+
+/* ---------- start ---------- */
+window.addEventListener('load', async () => {
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(API_URL)){
+    show('login');
+    toast('API_URL belum diisi. Edit index.html dan tempel Web app URL Apps Script.', 'bad');
+    return;
+  }
+  const t = store.get('rsfc_token');
+  if (t){
+    S.token = t;
+    try{ S.user = await api('apiMe', t); enterApp(); return; }catch(e){}
+  }
+  forceLogout();
+});
+</script>
+</body>
+</html>
