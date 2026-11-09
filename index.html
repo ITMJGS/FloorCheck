@@ -71,10 +71,31 @@
   .b-aktif{background:var(--ok-bg);color:var(--ok)} .b-menunggu{background:var(--warn-bg);color:var(--warn)} .b-nonaktif{background:var(--bad-bg);color:var(--bad)}
   .b-role{background:#e8eef6;color:var(--brand)}
   .table-wrap{overflow-x:auto}
-  .report{border-bottom:1px solid var(--line);padding:10px 0}
-  .report:last-child{border:0}
-  .report .top{display:flex;justify-content:space-between;gap:8px}
-  .report details{margin-top:6px;font-size:13px;color:var(--muted)}
+  .rep-title{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .rep-actions{display:flex;gap:6px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+  .stat{background:var(--bg);border-radius:10px;padding:10px 12px}
+  .stat b{display:block;font-size:22px;line-height:1.15;font-variant-numeric:tabular-nums}
+  .stat span{font-size:12px;color:var(--muted)}
+  .stat.ok b{color:var(--ok)} .stat.warn b{color:var(--warn)}
+  .rep{background:var(--card);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,30,50,.06);break-inside:avoid}
+  .rep-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .rep-name{font-weight:700}
+  .rep-sub{font-size:13px;color:var(--muted);margin-top:2px}
+  .rep-bar{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .rep-bar .progress{flex:1;height:8px}
+  .rep-bar .progress i.warn{background:var(--accent)}
+  .rep-pct{font-weight:700;font-size:13px;min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
+  .rep details{margin-top:10px}
+  .rep summary{cursor:pointer;font-size:13px;color:var(--brand);font-weight:600}
+  .fgrid{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+  .fgrid th,.fgrid td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:center}
+  .fgrid th:first-child,.fgrid td:first-child{text-align:left;white-space:nowrap}
+  .fgrid .y{color:var(--ok);font-weight:600} .fgrid .n{color:var(--bad);font-weight:600}
+  .fgrid small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+  .empty{text-align:center;color:var(--muted);padding:24px 8px}
+  .print-only{display:none}
+  @media (max-width:420px){.stats{grid-template-columns:repeat(2,1fr)}}
   .qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px}
   .qr-card{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center;background:#fff;break-inside:avoid}
   .qr-card .qr{display:flex;justify-content:center}
@@ -87,6 +108,10 @@
     body{background:#fff} .topbar,.tabs,.bottombar,#toast,.no-print{display:none!important}
     main{max-width:none;padding:0} .card{box-shadow:none;padding:0}
     .qr-grid{grid-template-columns:repeat(4,1fr)}
+    .print-only{display:block!important}
+    .rep{box-shadow:none;border:1px solid var(--line);padding:10px 12px}
+    .rep summary{display:none}
+    .stat{border:1px solid var(--line)}
   }
 </style>
 </head>
@@ -164,11 +189,21 @@
   <!-- LAPORAN -->
   <section id="v-reports" class="hidden">
     <div class="card">
-      <div class="row" style="align-items:center"><h2 style="margin:0">Laporan patroli</h2>
-        <button class="btn sm" id="btn-reload-rep" style="flex:none">Muat ulang</button></div>
-      <p class="muted">100 patroli terakhir, terbaru di atas.</p>
-      <div id="rep-list"></div>
+      <div class="rep-title">
+        <h2 style="margin:0">Laporan patroli</h2>
+        <div class="no-print rep-actions">
+          <button class="btn sm" id="btn-reload-rep">Muat ulang</button>
+          <button class="btn sm primary" id="btn-print-rep">Cetak</button>
+        </div>
+      </div>
+      <div class="row no-print">
+        <div><label>Tanggal</label><input type="date" id="rep-date"></div>
+        <div><label>Petugas</label><select id="rep-name"><option value="">Semua petugas</option></select></div>
+      </div>
+      <p class="muted print-only" id="rep-filter-text"></p>
+      <div class="stats" id="rep-stats"></div>
     </div>
+    <div id="rep-list"></div>
   </section>
 
   <!-- PENGGUNA -->
@@ -629,20 +664,92 @@ $('#btn-submit').addEventListener('click', e => {
 });
 
 /* ---------- laporan ---------- */
-async function loadReports(){
-  const box = $('#rep-list'); box.innerHTML = '<p class="muted">Memuat…</p>';
-  try{
-    const rows = await api('apiReports', S.token, 100);
-    if (!rows.length){ box.innerHTML = '<p class="muted">Belum ada data patroli.</p>'; return; }
-    box.innerHTML = rows.map(r => {
-      const full = r.filled === r.total;
-      return `<div class="report"><div class="top"><div><b>${esc(r.nama)}</b><div class="muted">${esc(r.tanggal)} · mulai ${esc(r.jam)}</div></div>
-        <span class="badge ${full ? 'b-aktif' : 'b-menunggu'}">${r.filled}/${r.total}</span></div>
-        ${full ? '' : `<details><summary>${r.missing.length} titik belum di-scan</summary>${r.missing.map(esc).join(', ')}</details>`}</div>`;
-    }).join('');
-  }catch(err){ box.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; }
+let repRows = [], repInit = false;
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
+function isoToDMY(iso){ const p = iso.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+function toMin(t){ const m = String(t||'').match(/^(\d{1,2})[:.](\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+function durasi(a, b){
+  const x = toMin(a), y = toMin(b); if (x == null || y == null) return null;
+  let d = y - x; if (d < 0) d += 1440;
+  return d < 60 ? d + ' menit' : Math.floor(d/60) + ' jam ' + (d % 60) + ' menit';
+}
+function stat(label, val, cls){ return `<div class="stat ${cls||''}"><b>${val}</b><span>${label}</span></div>`; }
+
+async function loadReports(){
+  if (!repInit){ $('#rep-date').value = todayISO(); repInit = true; }
+  $('#rep-list').innerHTML = '<div class="rep empty">Memuat laporan…</div>';
+  try{
+    repRows = await api('apiReports', S.token, 300);
+    const names = [...new Set(repRows.map(r => r.nama).filter(Boolean))].sort();
+    const sel = $('#rep-name'), cur = sel.value;
+    sel.innerHTML = '<option value="">Semua petugas</option>' + names.map(n => `<option>${esc(n)}</option>`).join('');
+    if (names.includes(cur)) sel.value = cur;
+    renderReports();
+  }catch(err){ $('#rep-list').innerHTML = '<div class="rep empty">' + esc(err.message) + '</div>'; }
+}
+
+function renderReports(){
+  const d = $('#rep-date').value, n = $('#rep-name').value;
+  const rows = repRows.filter(r => (!d || r.tanggal === isoToDMY(d)) && (!n || r.nama === n));
+  const full = rows.filter(r => r.total && r.filled === r.total).length;
+  const avg = rows.length ? Math.round(rows.reduce((s,r) => s + (r.total ? r.filled / r.total : 0), 0) / rows.length * 100) : 0;
+  $('#rep-stats').innerHTML =
+    stat('Patroli', rows.length) + stat('Lengkap', full, 'ok') +
+    stat('Belum lengkap', rows.length - full, rows.length - full ? 'warn' : '') + stat('Rata-rata cakupan', avg + '%');
+  $('#rep-filter-text').textContent = 'Tanggal: ' + (d ? fmtDate(d + 'T00:00') : 'semua') +
+    ' · Petugas: ' + (n || 'semua') + ' · Dicetak ' + new Date().toLocaleString('id-ID');
+  $('#rep-list').innerHTML = rows.length ? rows.map(repCard).join('')
+    : `<div class="rep empty">Belum ada patroli${d ? ' pada tanggal ini' : ''}.${d ? '<br>Kosongkan kolom Tanggal untuk melihat semua.' : ''}</div>`;
+}
+
+function repCard(r){
+  const pct = r.total ? Math.round(r.filled / r.total * 100) : 0;
+  const full = r.total && r.filled === r.total;
+  const selesai = r.selesai ? String(r.selesai).slice(0,5) : '';
+  const dur = selesai ? durasi(r.jam, selesai) : null;
+  const sub = [esc(r.tanggal), esc(r.jam) + (selesai ? '–' + esc(selesai) : ''), dur].filter(Boolean).join(' · ');
+  return `<div class="rep">
+    <div class="rep-top"><div><div class="rep-name">${esc(r.nama)}</div><div class="rep-sub">${sub}</div></div>
+      <span class="badge ${full ? 'b-aktif' : 'b-menunggu'}">${full ? 'Lengkap' : 'Kurang ' + (r.total - r.filled)}</span></div>
+    <div class="rep-bar"><div class="progress"><i class="${full ? '' : 'warn'}" style="width:${pct}%"></i></div>
+      <span class="rep-pct">${r.filled}/${r.total}</span></div>
+    <details><summary>Rincian per lantai</summary>${floorTable(r)}</details>
+  </div>`;
+}
+
+function floorTable(r){
+  const miss = new Set((r.missing || []).map(norm));
+  const times = {}; Object.keys(r.times || {}).forEach(k => times[norm(k)] = r.times[k]);
+  const groups = groupCps();
+  if (!groups.length){
+    return r.missing && r.missing.length ? '<p class="muted">Belum di-scan: ' + r.missing.map(esc).join(', ') + '</p>' : '<p class="muted">Semua titik sudah di-scan.</p>';
+  }
+  const cols = [];
+  groups.forEach(g => g.items.forEach(i => { if (!cols.includes(i.label)) cols.push(i.label); }));
+  const head = '<tr><th>Lantai</th>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
+  const body = groups.map(g => {
+    const title = /^\d+$/.test(g.floor) ? g.floor : esc(g.floor);
+    return `<tr><td>${title}</td>` + cols.map(c => {
+      const it = g.items.find(i => i.label === c);
+      if (!it) return '<td class="muted">–</td>';
+      if (miss.has(norm(it.cp))) return '<td class="n">✗</td>';
+      const t = times[norm(it.cp)];
+      return `<td class="y">✓${t ? '<small>' + esc(String(t).slice(0,5)) + '</small>' : ''}</td>`;
+    }).join('') + '</tr>';
+  }).join('');
+  return `<table class="fgrid"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
 $('#btn-reload-rep').addEventListener('click', loadReports);
+$('#rep-date').addEventListener('change', renderReports);
+$('#rep-name').addEventListener('change', renderReports);
+$('#btn-print-rep').addEventListener('click', () => {
+  document.querySelectorAll('#rep-list details').forEach(d => d.open = true);
+  setTimeout(() => window.print(), 200);
+});
 
 /* ---------- pengguna ---------- */
 let usersCache = [];
