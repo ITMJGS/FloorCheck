@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Room Service Floor Check</title>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{
@@ -51,6 +51,9 @@
   .progress i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
   #reader{width:100%;border-radius:12px;overflow:hidden;background:#000;margin-top:12px}
   #reader:empty{display:none}
+  #reader{position:relative}
+  #reader video{display:block;width:100%;max-height:60vh;object-fit:cover;background:#000}
+  #reader .scan-frame{position:absolute;left:50%;top:50%;width:min(62%,42vh);aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,.28);pointer-events:none}
   .last-scan{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px}
   .last-scan.ok{background:var(--ok-bg);color:var(--ok)} .last-scan.warn{background:var(--warn-bg);color:var(--warn)} .last-scan.bad{background:var(--bad-bg);color:var(--bad)}
   .floor{margin-bottom:10px}
@@ -150,7 +153,7 @@
           <select id="cam-select"></select>
         </div>
         <div id="reader"></div>
-        <div id="reader-file" class="hidden"></div>
+        <div id="cam-status" class="muted hidden" style="margin-top:6px"></div>
         <div id="last-scan" class="last-scan hidden"></div>
       </div>
 
@@ -218,7 +221,7 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const S = { token:null, user:null, cps:[], patrol:null, scanner:null, fileScanner:null, lastText:'', lastAt:0, view:null };
+const S = { token:null, user:null, cps:[], patrol:null, lastText:'', lastAt:0, view:null };
 const ROLE_LABEL = { admin:'Admin', supervisor:'Supervisor', petugas:'Petugas' };
 
 /* ---------- util ---------- */
@@ -416,97 +419,180 @@ function handleScan(text){
   renderPatrol();
 }
 
-/* Status pemindai html5-qrcode: 1 = belum jalan, 2 = memindai, 3 = jeda */
-let camBusy = false;
-function camScanning(){
-  try{ return !!S.scanner && S.scanner.getState() !== 1; }catch(e){ return false; }
-}
-async function stopScanner(sc){
-  if (!sc) return;
-  try{ if (sc.getState() !== 1) await sc.stop(); }catch(e){}
-}
-/* ---- pemilihan kamera (HP dengan beberapa lensa belakang) ---- */
+/* ================= KAMERA =================
+   Kamera dibuka langsung lewat getUserMedia dan ditampilkan di <video>.
+   QR dibaca dengan BarcodeDetector bawaan Chrome; browser yang belum
+   mendukungnya (mis. iPhone) memakai jsQR. */
 const CAM_KEY = 'rsfc_cam';
 const BACK_RE = /back|rear|belakang|environment/i;
-let camList = [], camTried = new Set(), camWatch = null;
+const cam = { stream:null, video:null, timer:null, watch:null, busy:false, list:[], tried:new Set(), detector:null, canvas:null, label:'' };
 
-function pickCamera(cams){
+function camScanning(){ return !!cam.stream; }
+function camStatus(msg){
+  const el = $('#cam-status'); if (!el) return;
+  el.textContent = msg || ''; el.classList.toggle('hidden', !msg);
+}
+async function listCameras(){
+  try{
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    cam.list = devs.filter(d => d.kind === 'videoinput')
+      .map((d,i) => ({ id:d.deviceId, label:d.label || ('Kamera ' + (i+1)) }));
+  }catch(e){ cam.list = []; }
+}
+function pickCamera(){
   const saved = store.get(CAM_KEY);
-  if (saved && cams.some(c => c.id === saved)) return saved;
-  const back = cams.filter(c => BACK_RE.test(c.label));
-  const pool = back.length ? back : cams;
-  const main = pool.find(c => /camera2 0\b|camera 0\b/i.test(c.label));   // lensa utama Android
-  return (main || pool[0] || {}).id;
+  if (saved && cam.list.some(c => c.id === saved)) return saved;
+  const back = cam.list.filter(c => BACK_RE.test(c.label));
+  const pool = back.length ? back : cam.list;
+  const main = pool.find(c => /camera2? 0\b/i.test(c.label));     // lensa utama Android
+  return (main || pool[0] || {}).id || null;
 }
 function fillCamSelect(currentId){
   const sel = $('#cam-select');
-  sel.innerHTML = camList.map((c,i) =>
-    `<option value="${esc(c.id)}">${esc(c.label || ('Kamera ' + (i+1)))}</option>`).join('');
+  sel.innerHTML = cam.list.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('');
   if (currentId) sel.value = currentId;
-  $('#cam-row').classList.toggle('hidden', camList.length < 2);
+  $('#cam-row').classList.toggle('hidden', cam.list.length < 2);
 }
-/* true jika frame video hampir seluruhnya hitam */
-function isBlackFrame(v){
+/* rata-rata kecerahan frame (0–255); -1 jika tidak bisa diukur */
+function frameBrightness(v){
   try{
     const c = document.createElement('canvas'); c.width = 32; c.height = 24;
     const x = c.getContext('2d'); x.drawImage(v, 0, 0, 32, 24);
     const d = x.getImageData(0, 0, 32, 24).data; let s = 0;
     for (let i = 0; i < d.length; i += 4) s += d[i] + d[i+1] + d[i+2];
-    return s / (d.length / 4 * 3) < 6;
-  }catch(e){ return false; }
+    return s / (d.length / 4 * 3);
+  }catch(e){ return -1; }
 }
-/* 3,5 detik setelah kamera nyala: kalau gambarnya gelap, otomatis coba lensa lain */
+async function getDetector(){
+  if (cam.detector !== null) return cam.detector;
+  cam.detector = false;
+  try{
+    if ('BarcodeDetector' in window){
+      const f = await BarcodeDetector.getSupportedFormats();
+      if (f.includes('qr_code')) cam.detector = new BarcodeDetector({ formats:['qr_code'] });
+    }
+  }catch(e){}
+  return cam.detector;
+}
+function jsqrFrom(source, srcW, srcH, maxW){
+  if (typeof jsQR !== 'function' || !srcW) return null;
+  const s = Math.min(1, maxW / srcW), w = Math.round(srcW * s), h = Math.round(srcH * s);
+  const c = cam.canvas || (cam.canvas = document.createElement('canvas'));
+  c.width = w; c.height = h;
+  const x = c.getContext('2d', { willReadFrequently:true });
+  x.drawImage(source, 0, 0, w, h);
+  const r = jsQR(x.getImageData(0, 0, w, h).data, w, h, { inversionAttempts:'attemptBoth' });
+  return r && r.data ? r.data : null;
+}
+async function scanFrame(){
+  const v = cam.video;
+  if (!v || !cam.stream || v.readyState < 2 || !v.videoWidth) return;
+  try{
+    const det = await getDetector();
+    let text = null;
+    if (det){ const codes = await det.detect(v); if (codes.length) text = codes[0].rawValue; }
+    else text = jsqrFrom(v, v.videoWidth, v.videoHeight, 640);
+    if (text) handleScan(text);
+  }catch(e){}
+}
+/* 3,5 detik setelah kamera nyala: kalau tidak ada gambar / gambar hitam, coba lensa lain */
 function watchCamera(id){
-  clearTimeout(camWatch);
-  camWatch = setTimeout(() => {
-    const v = $('#reader video');
-    if (!camScanning() || !v) return;
-    if (v.videoWidth > 0 && !isBlackFrame(v)){ camTried.clear(); if (id) store.set(CAM_KEY, id); return; }
-    if (id) camTried.add(id);
-    const next = camList.find(c => !camTried.has(c.id) && BACK_RE.test(c.label)) || camList.find(c => !camTried.has(c.id));
+  clearTimeout(cam.watch);
+  cam.watch = setTimeout(() => {
+    const v = cam.video; if (!cam.stream || !v) return;
+    const b = v.videoWidth ? frameBrightness(v) : 0;
+    camStatus(cam.label + ' · ' + (v.videoWidth ? v.videoWidth + '×' + v.videoHeight : 'tidak ada gambar'));
+    if (v.videoWidth && (b < 0 || b >= 6)){ cam.tried.clear(); if (id) store.set(CAM_KEY, id); return; }
+    if (id) cam.tried.add(id);
+    const next = cam.list.find(c => !cam.tried.has(c.id) && BACK_RE.test(c.label)) || cam.list.find(c => !cam.tried.has(c.id));
     if (next){ toast('Gambar gelap, mencoba kamera lain…'); openCamera(next.id); }
-    else { camTried.clear(); toast('Semua kamera sudah dicoba. Pilih kamera di daftar, atau pakai Foto QR.', 'bad'); }
+    else { cam.tried.clear(); toast('Semua kamera sudah dicoba. Pilih kamera di daftar, atau pakai Foto QR.', 'bad'); }
   }, 3500);
 }
 
 async function openCamera(camId){
-  if (camBusy) return;                       // cegah dibuka dua kali bersamaan
-  camBusy = true;
+  if (cam.busy) return;                                   // cegah dibuka dua kali bersamaan
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    toast('Browser ini tidak mendukung kamera. Pakai tombol "Foto QR".', 'bad'); return;
+  }
+  cam.busy = true;
   const btn = $('#btn-cam');
   btn.disabled = true; btn.textContent = 'Membuka kamera…';
   try{
-    await closeCamera();                     // bersihkan sisa sesi sebelumnya
-    if (!camList.length){ try{ camList = await Html5Qrcode.getCameras(); }catch(e){ camList = []; } }
-    const id = (typeof camId === 'string' && camId) || pickCamera(camList);
-    const sc = new Html5Qrcode('reader');
-    S.scanner = sc;
-    await sc.start(
-      id || { facingMode:'environment' },
-      { fps:10, qrbox:(w,h) => { const m = Math.floor(Math.min(w,h) * 0.7); return { width:m, height:m }; } },
-      handleScan, () => {}
-    );
-    if (S.scanner !== sc){ await stopScanner(sc); return; }  // sudah ditutup saat sedang dibuka
+    closeCamera();                                        // bersihkan sesi sebelumnya
+    const size = { width:{ ideal:1280 }, height:{ ideal:720 } };
+    if (!cam.list.length) await listCameras();
+    const named = cam.list.some(c => c.id && !/^Kamera \d+$/.test(c.label));   // izin sudah pernah diberikan
+    let id = (typeof camId === 'string' && camId) || (named ? pickCamera() : null);
+    let stream;
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({ audio:false,
+        video: id ? { deviceId:{ exact:id }, ...size } : { facingMode:{ ideal:'environment' }, ...size } });
+    }catch(err){
+      if (!id || /NotAllowed|Security/i.test(err.name)) throw err;
+      cam.tried.add(id);                                  // lensa ini gagal → biarkan browser memilih
+      stream = await navigator.mediaDevices.getUserMedia({ audio:false, video:{ facingMode:{ ideal:'environment' }, ...size } });
+    }
+    if (!cam.list.length || cam.list.every(c => /^Kamera \d+$/.test(c.label))) await listCameras(); // nama lensa baru ada setelah izin
+    const track = stream.getVideoTracks()[0];
+    const st = (track && track.getSettings) ? track.getSettings() : {};
+    id = st.deviceId || id;
+    cam.label = (cam.list.find(c => c.id === id) || {}).label || (track && track.label) || 'Kamera';
+
+    const v = document.createElement('video');
+    v.setAttribute('playsinline', ''); v.setAttribute('autoplay', ''); v.setAttribute('muted', '');
+    v.muted = true; v.playsInline = true;
+    v.srcObject = stream;
+    const r = $('#reader'); r.innerHTML = '';
+    const frame = document.createElement('div'); frame.className = 'scan-frame';
+    r.append(v, frame);
+    cam.stream = stream; cam.video = v;
+    try{ await v.play(); }catch(e){}
+    if (track) track.addEventListener('ended', () => {
+      if (cam.stream === stream){ closeCamera(); toast('Kamera terputus. Tekan Buka Kamera lagi.', 'bad'); }
+    });
+    let scanning = false;
+    cam.timer = setInterval(async () => {
+      if (scanning) return; scanning = true;
+      try{ await scanFrame(); } finally { scanning = false; }
+    }, 250);
     btn.textContent = 'Tutup Kamera';
     fillCamSelect(id);
+    camStatus(cam.label + ' · menyiapkan…');
+    v.addEventListener('playing', () => camStatus(cam.label + ' · ' + v.videoWidth + '×' + v.videoHeight), { once:true });
     watchCamera(id);
   }catch(err){
-    await closeCamera();
+    closeCamera();
     const name = (err && err.name) || String(err);
-    if (/NotAllowed|Permission/i.test(name)) toast('Izin kamera ditolak. Izinkan kamera untuk situs ini, lalu muat ulang.', 'bad');
+    if (/NotAllowed|Permission|Security/i.test(name)) toast('Izin kamera ditolak. Izinkan kamera untuk situs ini, lalu muat ulang.', 'bad');
     else if (/NotFound|Overconstrained/i.test(name)) toast('Kamera belakang tidak ditemukan di perangkat ini.', 'bad');
-    else if (/NotReadable/i.test(name)) toast('Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.', 'bad');
+    else if (/NotReadable|Abort/i.test(name)) toast('Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.', 'bad');
     else toast('Kamera tidak bisa dibuka (' + name + '). Pakai tombol "Foto QR".', 'bad');
   }finally{
-    camBusy = false; btn.disabled = false;
-    if (!camScanning()) btn.textContent = 'Buka Kamera';
+    cam.busy = false; btn.disabled = false;
+    if (!cam.stream) btn.textContent = 'Buka Kamera';
   }
 }
-async function closeCamera(){
-  clearTimeout(camWatch);
-  const sc = S.scanner; S.scanner = null;
-  await stopScanner(sc);
+function closeCamera(){
+  clearTimeout(cam.watch); clearInterval(cam.timer); cam.timer = null;
+  if (cam.stream) cam.stream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} });
+  if (cam.video){ try{ cam.video.srcObject = null; }catch(e){} }
+  cam.stream = null; cam.video = null;
   const r = $('#reader'); if (r) r.innerHTML = '';
-  if (!camBusy) $('#btn-cam').textContent = 'Buka Kamera';
+  camStatus('');
+  if (!cam.busy) $('#btn-cam').textContent = 'Buka Kamera';
+}
+/* baca QR dari foto (tombol Foto QR) */
+async function decodeImageFile(file){
+  const bmp = await createImageBitmap(file);
+  const det = await getDetector();
+  if (det){
+    const codes = await det.detect(bmp);
+    if (codes.length) return codes[0].rawValue;
+  }
+  const text = jsqrFrom(bmp, bmp.width, bmp.height, 1200) || jsqrFrom(bmp, bmp.width, bmp.height, 700);
+  if (text) return text;
+  throw new Error('QR tidak ditemukan');
 }
 
 $('#btn-start').addEventListener('click', () => {
@@ -515,14 +601,13 @@ $('#btn-start').addEventListener('click', () => {
 });
 $('#btn-cam').addEventListener('click', () => camScanning() ? closeCamera() : openCamera());
 $('#cam-select').addEventListener('change', e => {
-  store.set(CAM_KEY, e.target.value); camTried.clear(); openCamera(e.target.value);
+  store.set(CAM_KEY, e.target.value); cam.tried.clear(); openCamera(e.target.value);
 });
 $('#file-qr').addEventListener('change', async e => {
   const file = e.target.files[0]; e.target.value = '';
   if (!file) return;
   try{
-    if (!S.fileScanner) S.fileScanner = new Html5Qrcode('reader-file');
-    handleScan(await S.fileScanner.scanFile(file, false));
+    handleScan(await decodeImageFile(file));
   }catch(err){ toast('QR tidak terbaca di foto. Coba lebih dekat & terang.', 'bad'); }
 });
 $('#btn-cancel').addEventListener('click', () => {
