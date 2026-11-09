@@ -88,6 +88,7 @@
   .rep-pct{font-weight:700;font-size:13px;min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
   .rep details{margin-top:10px}
   .rep summary{cursor:pointer;font-size:13px;color:var(--brand);font-weight:600}
+  .fgrid-wrap{overflow-x:auto;max-width:100%}
   .fgrid{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
   .fgrid th,.fgrid td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:center}
   .fgrid th:first-child,.fgrid td:first-child{text-align:left;white-space:nowrap}
@@ -405,8 +406,9 @@ function savePatrol(){
 function groupCps(){
   const groups = [], map = {};
   S.cps.forEach(cp => {
-    const m = cp.match(/^(\S+)\s+(.+)$/);
-    const key = m ? m[1] : cp, label = m ? m[2] : cp;
+    // mendukung "30 Gatsu Barat" maupun "Lantai 30 Gatsu Barat" / "Lt. 30 Gatsu Barat"
+    const m = cp.match(/^(?:lantai|lt\.?|floor)?\s*(\d+[A-Za-z]?)\s+(.+)$/i) || cp.match(/^(\S+)\s+(.+)$/);
+    const key = m ? m[1] : cp, label = m ? m[2].trim() : cp;
     if (!map[key]){ map[key] = { floor:key, items:[] }; groups.push(map[key]); }
     map[key].items.push({ cp, label });
   });
@@ -740,7 +742,7 @@ function floorTable(r){
       return `<td class="y">✓${t ? '<small>' + esc(String(t).slice(0,5)) + '</small>' : ''}</td>`;
     }).join('') + '</tr>';
   }).join('');
-  return `<table class="fgrid"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  return `<div class="fgrid-wrap"><table class="fgrid"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
 $('#btn-reload-rep').addEventListener('click', loadReports);
