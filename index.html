@@ -145,6 +145,10 @@
             <input type="file" id="file-qr" accept="image/*" capture="environment" class="hidden">
           </label>
         </div>
+        <div id="cam-row" class="hidden" style="margin-top:10px">
+          <label style="margin-top:0">Kamera (ganti jika gambar gelap)</label>
+          <select id="cam-select"></select>
+        </div>
         <div id="reader"></div>
         <div id="reader-file" class="hidden"></div>
         <div id="last-scan" class="last-scan hidden"></div>
@@ -421,22 +425,70 @@ async function stopScanner(sc){
   if (!sc) return;
   try{ if (sc.getState() !== 1) await sc.stop(); }catch(e){}
 }
-async function openCamera(){
+/* ---- pemilihan kamera (HP dengan beberapa lensa belakang) ---- */
+const CAM_KEY = 'rsfc_cam';
+const BACK_RE = /back|rear|belakang|environment/i;
+let camList = [], camTried = new Set(), camWatch = null;
+
+function pickCamera(cams){
+  const saved = store.get(CAM_KEY);
+  if (saved && cams.some(c => c.id === saved)) return saved;
+  const back = cams.filter(c => BACK_RE.test(c.label));
+  const pool = back.length ? back : cams;
+  const main = pool.find(c => /camera2 0\b|camera 0\b/i.test(c.label));   // lensa utama Android
+  return (main || pool[0] || {}).id;
+}
+function fillCamSelect(currentId){
+  const sel = $('#cam-select');
+  sel.innerHTML = camList.map((c,i) =>
+    `<option value="${esc(c.id)}">${esc(c.label || ('Kamera ' + (i+1)))}</option>`).join('');
+  if (currentId) sel.value = currentId;
+  $('#cam-row').classList.toggle('hidden', camList.length < 2);
+}
+/* true jika frame video hampir seluruhnya hitam */
+function isBlackFrame(v){
+  try{
+    const c = document.createElement('canvas'); c.width = 32; c.height = 24;
+    const x = c.getContext('2d'); x.drawImage(v, 0, 0, 32, 24);
+    const d = x.getImageData(0, 0, 32, 24).data; let s = 0;
+    for (let i = 0; i < d.length; i += 4) s += d[i] + d[i+1] + d[i+2];
+    return s / (d.length / 4 * 3) < 6;
+  }catch(e){ return false; }
+}
+/* 3,5 detik setelah kamera nyala: kalau gambarnya gelap, otomatis coba lensa lain */
+function watchCamera(id){
+  clearTimeout(camWatch);
+  camWatch = setTimeout(() => {
+    const v = $('#reader video');
+    if (!camScanning() || !v) return;
+    if (v.videoWidth > 0 && !isBlackFrame(v)){ camTried.clear(); if (id) store.set(CAM_KEY, id); return; }
+    if (id) camTried.add(id);
+    const next = camList.find(c => !camTried.has(c.id) && BACK_RE.test(c.label)) || camList.find(c => !camTried.has(c.id));
+    if (next){ toast('Gambar gelap, mencoba kamera lain…'); openCamera(next.id); }
+    else { camTried.clear(); toast('Semua kamera sudah dicoba. Pilih kamera di daftar, atau pakai Foto QR.', 'bad'); }
+  }, 3500);
+}
+
+async function openCamera(camId){
   if (camBusy) return;                       // cegah dibuka dua kali bersamaan
   camBusy = true;
   const btn = $('#btn-cam');
   btn.disabled = true; btn.textContent = 'Membuka kamera…';
   try{
     await closeCamera();                     // bersihkan sisa sesi sebelumnya
+    if (!camList.length){ try{ camList = await Html5Qrcode.getCameras(); }catch(e){ camList = []; } }
+    const id = (typeof camId === 'string' && camId) || pickCamera(camList);
     const sc = new Html5Qrcode('reader');
     S.scanner = sc;
     await sc.start(
-      { facingMode:'environment' },
+      id || { facingMode:'environment' },
       { fps:10, qrbox:(w,h) => { const m = Math.floor(Math.min(w,h) * 0.7); return { width:m, height:m }; } },
       handleScan, () => {}
     );
     if (S.scanner !== sc){ await stopScanner(sc); return; }  // sudah ditutup saat sedang dibuka
     btn.textContent = 'Tutup Kamera';
+    fillCamSelect(id);
+    watchCamera(id);
   }catch(err){
     await closeCamera();
     const name = (err && err.name) || String(err);
@@ -450,6 +502,7 @@ async function openCamera(){
   }
 }
 async function closeCamera(){
+  clearTimeout(camWatch);
   const sc = S.scanner; S.scanner = null;
   await stopScanner(sc);
   const r = $('#reader'); if (r) r.innerHTML = '';
@@ -461,6 +514,9 @@ $('#btn-start').addEventListener('click', () => {
   savePatrol(); renderPatrol(); openCamera();
 });
 $('#btn-cam').addEventListener('click', () => camScanning() ? closeCamera() : openCamera());
+$('#cam-select').addEventListener('change', e => {
+  store.set(CAM_KEY, e.target.value); camTried.clear(); openCamera(e.target.value);
+});
 $('#file-qr').addEventListener('change', async e => {
   const file = e.target.files[0]; e.target.value = '';
   if (!file) return;
