@@ -109,6 +109,10 @@
   .rep{background:var(--card);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,30,50,.06);break-inside:avoid}
   .rep-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
   .rep-name{font-weight:700}
+  .quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .quick button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+  .quick button.active{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+  .rep-note{font-size:12.5px;color:var(--warn);background:var(--warn-bg);border-radius:8px;padding:8px 10px;margin-top:10px}
   .rep-sub{font-size:13px;color:var(--muted);margin-top:2px}
   .rep-bar{display:flex;align-items:center;gap:10px;margin-top:10px}
   .rep-bar .progress{flex:1;height:8px}
@@ -228,9 +232,20 @@
           <button class="btn sm primary" id="btn-print-rep">Cetak</button>
         </div>
       </div>
-      <div class="row no-print">
-        <div><label>Tanggal</label><input type="date" id="rep-date"></div>
-        <div><label>Petugas</label><select id="rep-name"><option value="">Semua petugas</option></select></div>
+      <div class="row no-print" style="flex-wrap:nowrap">
+        <div style="min-width:0"><label>Dari tanggal</label><input type="date" id="rep-from"></div>
+        <div style="min-width:0"><label>Sampai tanggal</label><input type="date" id="rep-to"></div>
+      </div>
+      <div class="quick no-print" id="rep-quick">
+        <button type="button" data-q="today">Hari ini</button>
+        <button type="button" data-q="yesterday">Kemarin</button>
+        <button type="button" data-q="7">7 hari</button>
+        <button type="button" data-q="30">30 hari</button>
+        <button type="button" data-q="month">Bulan ini</button>
+        <button type="button" data-q="all">Semua</button>
+      </div>
+      <div class="no-print">
+        <label>Petugas</label><select id="rep-name"><option value="">Semua petugas</option></select>
       </div>
       <p class="muted print-only" id="rep-filter-text"></p>
       <div class="stats" id="rep-stats"></div>
@@ -962,32 +977,76 @@ function durasi(a, b){
 }
 function stat(label, val, cls){ return `<div class="stat ${cls||''}"><b>${val}</b><span>${label}</span></div>`; }
 
+function isoOffset(days){
+  const d = new Date(); d.setDate(d.getDate() + days);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function dmyToISO(s){ const m = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; }
+function setQuick(q){
+  const t = todayISO(); let f = '', to = '';
+  if (q === 'today'){ f = to = t; }
+  else if (q === 'yesterday'){ f = to = isoOffset(-1); }
+  else if (q === '7'){ f = isoOffset(-6); to = t; }
+  else if (q === '30'){ f = isoOffset(-29); to = t; }
+  else if (q === 'month'){ f = t.slice(0, 8) + '01'; to = t; }
+  $('#rep-from').value = f; $('#rep-to').value = to;
+  markQuick();
+}
+function markQuick(){
+  const f = $('#rep-from').value, to = $('#rep-to').value, t = todayISO();
+  const map = { today:[t,t], yesterday:[isoOffset(-1),isoOffset(-1)], '7':[isoOffset(-6),t], '30':[isoOffset(-29),t], month:[t.slice(0,8)+'01',t], all:['',''] };
+  document.querySelectorAll('#rep-quick button').forEach(b => {
+    const m = map[b.dataset.q]; b.classList.toggle('active', !!m && m[0] === f && m[1] === to);
+  });
+}
+function fmtRange(f, to){
+  const d = s => fmtDate(s + 'T00:00');
+  if (!f && !to) return 'Semua tanggal';
+  if (f && to && f === to) return d(f);
+  if (f && to) return d(f) + ' – ' + d(to);
+  return f ? 'Sejak ' + d(f) : 'Sampai ' + d(to);
+}
+
+let repSeq = 0, repTruncated = false;
 async function loadReports(){
-  if (!repInit){ $('#rep-date').value = todayISO(); repInit = true; }
+  if (!repInit){ setQuick('today'); repInit = true; }
+  let f = $('#rep-from').value, to = $('#rep-to').value;
+  if (f && to && f > to){ [f, to] = [to, f]; $('#rep-from').value = f; $('#rep-to').value = to; markQuick(); }
+  const nama = $('#rep-name').value;
+  const seq = ++repSeq;
   $('#rep-list').innerHTML = '<div class="rep empty">Memuat laporan…</div>';
   try{
-    repRows = await api('apiReports', S.token, 300);
-    const names = [...new Set(repRows.map(r => r.nama).filter(Boolean))].sort();
-    const sel = $('#rep-name'), cur = sel.value;
+    const res = await api('apiReports', S.token, { from:f, to:to, nama:nama, limit:500 });
+    if (seq !== repSeq) return;                       // ada permintaan yang lebih baru
+    let rows, names;
+    if (Array.isArray(res)){                          // server versi lama: saring di HP
+      rows = res.filter(r => { const k = dmyToISO(r.tanggal); return (!f || k >= f) && (!to || k <= to) && (!nama || r.nama === nama); });
+      names = [...new Set(res.map(r => r.nama).filter(Boolean))].sort();
+      repTruncated = false;
+    } else { rows = res.rows || []; names = res.names || []; repTruncated = !!res.truncated; }
+    repRows = rows;
+    const sel = $('#rep-name');
     sel.innerHTML = '<option value="">Semua petugas</option>' + names.map(n => `<option>${esc(n)}</option>`).join('');
-    if (names.includes(cur)) sel.value = cur;
+    sel.value = names.includes(nama) ? nama : '';
     renderReports();
-  }catch(err){ $('#rep-list').innerHTML = '<div class="rep empty">' + esc(err.message) + '</div>'; }
+  }catch(err){ if (seq === repSeq) $('#rep-list').innerHTML = '<div class="rep empty">' + esc(err.message) + '</div>'; }
 }
 
 function renderReports(){
-  const d = $('#rep-date').value, n = $('#rep-name').value;
-  const rows = repRows.filter(r => (!d || r.tanggal === isoToDMY(d)) && (!n || r.nama === n));
+  const f = $('#rep-from').value, to = $('#rep-to').value, n = $('#rep-name').value;
+  const rows = repRows;
   const full = rows.filter(r => r.total && r.filled === r.total).length;
   const avg = rows.length ? Math.round(rows.reduce((s,r) => s + (r.total ? r.filled / r.total : 0), 0) / rows.length * 100) : 0;
   $('#rep-stats').innerHTML =
     stat('Patroli', rows.length) + stat('Lengkap', full, 'ok') +
     stat('Belum lengkap', rows.length - full, rows.length - full ? 'warn' : '') + stat('Rata-rata cakupan', avg + '%');
-  $('#rep-filter-text').textContent = 'Tanggal: ' + (d ? fmtDate(d + 'T00:00') : 'semua') +
+  $('#rep-filter-text').textContent = 'Tanggal: ' + fmtRange(f, to) +
     ' · Petugas: ' + (n || 'semua') + ' · Dicetak ' + new Date().toLocaleString('id-ID');
-  $('#rep-list').innerHTML = rows.length ? rows.map(repCard).join('')
-    : `<div class="rep empty">Belum ada patroli${d ? ' pada tanggal ini' : ''}.${d ? '<br>Kosongkan kolom Tanggal untuk melihat semua.' : ''}</div>`;
+  const note = repTruncated ? '<div class="rep-note">Ditampilkan 500 patroli terbaru. Persempit tanggal atau pilih petugas untuk melihat sisanya.</div>' : '';
+  $('#rep-list').innerHTML = note + (rows.length ? rows.map(repCard).join('')
+    : `<div class="rep empty">Tidak ada patroli untuk ${esc(fmtRange(f, to).toLowerCase())}${n ? ' oleh ' + esc(n) : ''}.</div>`);
 }
+
 
 function repCard(r){
   const pct = r.total ? Math.round(r.filled / r.total * 100) : 0;
@@ -1054,8 +1113,13 @@ function floorTable(r){
 }
 
 $('#btn-reload-rep').addEventListener('click', loadReports);
-$('#rep-date').addEventListener('change', renderReports);
-$('#rep-name').addEventListener('change', renderReports);
+$('#rep-from').addEventListener('change', () => { markQuick(); loadReports(); });
+$('#rep-to').addEventListener('change', () => { markQuick(); loadReports(); });
+$('#rep-name').addEventListener('change', loadReports);
+$('#rep-quick').addEventListener('click', e => {
+  const b = e.target.closest('button[data-q]'); if (!b) return;
+  setQuick(b.dataset.q); loadReports();
+});
 $('#btn-print-rep').addEventListener('click', () => {
   document.querySelectorAll('#rep-list details').forEach(d => d.open = true);
   setTimeout(() => window.print(), 200);
