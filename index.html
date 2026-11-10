@@ -61,6 +61,25 @@
   .chips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
   .chip{border:1px dashed var(--line);border-radius:10px;padding:8px;font-size:12.5px;text-align:center;color:var(--muted);background:#fafbfc}
   .chip.done{border:1px solid transparent;background:var(--ok-bg);color:var(--ok);font-weight:600}
+  .chip{position:relative}
+  button.chip{font:inherit;cursor:pointer;width:100%}
+  .chip .ph{display:block;font-size:11px;margin-top:3px;font-weight:600}
+  .chip .ph.add{color:var(--brand)} .chip .ph.wait{color:var(--warn)}
+  .chip-thumb{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:6px;object-fit:cover;border:1px solid #fff}
+  .chip:has(.chip-thumb){padding-left:32px;padding-right:32px}
+  .last-scan .btn{margin-top:8px;width:100%}
+  .pm{position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column;color:#fff}
+  .pm-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px}
+  .pm-head b{font-size:15px}
+  .pm-stage{flex:1;position:relative;overflow:hidden}
+  .pm-stage video,.pm-stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+  .pm-foot{padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;justify-content:center}
+  #pm-live{display:flex;align-items:center;justify-content:center;width:100%;position:relative;min-height:72px}
+  .pm-shutter{width:72px;height:72px;border-radius:50%;border:5px solid #fff;background:rgba(255,255,255,.25);cursor:pointer}
+  .pm-shutter:active{background:#fff}
+  #pm-native{position:absolute;left:0}
+  #pm-review{width:100%;max-width:420px}
+  .ph-link{color:var(--ok);text-decoration:none}
   .chip small{display:block;font-weight:400;font-size:11px;margin-top:2px}
   .bottombar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;justify-content:center;z-index:8}
   .bottombar .btn{flex:1;max-width:360px}
@@ -102,7 +121,7 @@
   .qr-card .qr{display:flex;justify-content:center}
   .qr-card .qr img,.qr-card .qr canvas{width:130px!important;height:130px!important}
   .qr-card b{display:block;margin-top:8px;font-size:13px}
-  #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50}
+  #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s;z-index:70}
   #toast.show{opacity:1} #toast.bad{background:var(--bad)} #toast.ok{background:var(--ok)}
   @media (max-width:420px){.chips{grid-template-columns:repeat(2,1fr)}.meta{grid-template-columns:1fr 1fr}}
   @media print{
@@ -253,11 +272,24 @@
   <button class="btn danger" id="btn-cancel">Batalkan</button>
   <button class="btn ok" id="btn-submit">Kirim</button>
 </div>
+<div id="pm" class="pm hidden">
+  <div class="pm-head"><b id="pm-title"></b><button class="btn ghost sm" id="pm-close">Batal</button></div>
+  <div class="pm-stage"><video id="pm-video" playsinline muted autoplay></video><img id="pm-img" class="hidden" alt="Pratinjau foto"></div>
+  <div class="pm-foot">
+    <div id="pm-live">
+      <button class="btn ghost sm" id="pm-native">Kamera HP</button>
+      <button class="pm-shutter" id="pm-shot" aria-label="Ambil foto"></button>
+    </div>
+    <div id="pm-review" class="row hidden"><button class="btn" id="pm-retake">Ulangi</button><button class="btn ok" id="pm-use">Pakai foto</button></div>
+  </div>
+</div>
+<input type="file" id="file-photo" accept="image/*" capture="environment" class="hidden">
 <div id="toast"></div>
 
 <script>
 const $ = s => document.querySelector(s);
-const S = { token:null, user:null, cps:[], patrol:null, lastText:'', lastAt:0, view:null };
+const S = { token:null, user:null, cps:[], patrol:null, lastText:'', lastAt:0, view:null,
+  photoBusy:{}, photoVer:{}, photoMode:false, photoCp:null, shot:null, forceNative:false, reopenCam:false };
 const ROLE_LABEL = { admin:'Admin', supervisor:'Supervisor', petugas:'Petugas' };
 
 /* ---------- util ---------- */
@@ -339,6 +371,8 @@ function enterApp(){
   nav.innerHTML = tabs.map(([v,l]) => `<button data-view="${v}">${l}</button>`).join('');
   nav.classList.toggle('hidden', tabs.length < 2);
   S.patrol = store.get('rsfc_patrol_' + S.user.username);
+  S.photoBusy = {}; S.photoVer = {};
+  restorePhotos();
   show('patrol');
   loadCheckpoints();
 }
@@ -433,26 +467,30 @@ function renderPatrol(){
     const title = /^\d+$/.test(g.floor) ? 'Lantai ' + g.floor : g.floor;
     return `<div class="floor"><div class="floor-head"><span>${esc(title)}</span><span class="muted">${n}/${g.items.length}</span></div>
       <div class="chips">${g.items.map(i => scans[i.cp]
-        ? `<div class="chip done">✓ ${esc(i.label)}<small>${fmtTime(scans[i.cp])}</small></div>`
+        ? `<button type="button" class="chip done" data-photo="${esc(i.cp)}">${chipThumb(i.cp)}✓ ${esc(i.label)}<small>${fmtTime(scans[i.cp])}</small>${chipPhoto(i.cp)}</button>`
         : `<div class="chip">${esc(i.label)}<small>belum</small></div>`).join('')}</div></div>`;
   }).join('');
 }
 
-function setLastScan(msg, type){
-  const el = $('#last-scan'); el.textContent = msg; el.className = 'last-scan ' + type;
+function setLastScan(msg, type, photoCp){
+  const el = $('#last-scan');
+  el.innerHTML = esc(msg) + (photoCp
+    ? `<button type="button" class="btn accent" data-photo="${esc(photoCp)}">📷 ${hasPhoto(photoCp) ? 'Ganti foto' : 'Ambil foto'}</button>` : '');
+  el.className = 'last-scan ' + type;
 }
 
 function handleScan(text){
+  if (S.photoMode) return;                    // sedang memotret, abaikan QR
   const now = Date.now();
   if (text === S.lastText && now - S.lastAt < 3000) return;
   S.lastText = text; S.lastAt = now;
   if (!S.patrol) return;
   const cp = S.cps.find(c => norm(c) === norm(text));
   if (!cp){ setLastScan('QR tidak dikenali: "' + text + '"', 'bad'); toast('QR bukan titik cek yang terdaftar', 'bad'); return; }
-  if (S.patrol.scans[cp]){ setLastScan(cp + ' sudah di-scan jam ' + fmtTime(S.patrol.scans[cp]), 'warn'); return; }
+  if (S.patrol.scans[cp]){ setLastScan(cp + ' sudah di-scan jam ' + fmtTime(S.patrol.scans[cp]), 'warn', cp); return; }
   S.patrol.scans[cp] = new Date().toISOString();
   savePatrol(); beep();
-  setLastScan('✓ ' + cp + ' tercatat jam ' + fmtTime(S.patrol.scans[cp]), 'ok');
+  setLastScan('✓ ' + cp + ' tercatat jam ' + fmtTime(S.patrol.scans[cp]), 'ok', cp);
   renderPatrol();
 }
 
@@ -633,7 +671,8 @@ async function decodeImageFile(file){
 }
 
 $('#btn-start').addEventListener('click', () => {
-  S.patrol = { start:new Date().toISOString(), scans:{} };
+  S.patrol = { start:new Date().toISOString(), scans:{}, photos:{}, thumbs:{} };
+  S.photoBusy = {}; S.photoVer = {};
   savePatrol(); renderPatrol(); openCamera();
 });
 $('#btn-cam').addEventListener('click', () => camScanning() ? closeCamera() : openCamera());
@@ -649,20 +688,251 @@ $('#file-qr').addEventListener('change', async e => {
 });
 $('#btn-cancel').addEventListener('click', () => {
   if (!confirm('Batalkan patroli ini? Semua hasil scan akan dihapus.')) return;
-  closeCamera(); S.patrol = null; savePatrol(); setLastScan('', 'hidden'); renderPatrol();
+  closeCamera(); S.patrol = null; savePatrol(); setLastScan('', 'hidden'); clearPhotos(); renderPatrol();
 });
 $('#btn-submit').addEventListener('click', e => {
   const done = Object.keys(S.patrol.scans).length, total = S.cps.length;
   if (!done) return toast('Belum ada titik yang di-scan.', 'bad');
   if (done < total && !confirm('Baru ' + done + ' dari ' + total + ' titik yang di-scan. Tetap kirim?')) return;
-  withBusy(e.currentTarget, async () => {
+  const btn = e.currentTarget;
+  withBusy(btn, async () => {
     try{
-      const r = await api('apiSubmitPatrol', S.token, S.patrol);
+      btn.textContent = 'Mengunggah foto…';
+      const failed = await flushPhotos();
+      if (failed && !confirm(failed + ' foto belum terunggah (cek sinyal). Kirim tanpa foto tersebut?')){ renderPatrol(); return; }
+      btn.textContent = 'Mengirim…';
+      const r = await api('apiSubmitPatrol', S.token, { start:S.patrol.start, scans:S.patrol.scans, photos:S.patrol.photos || {} });
       closeCamera(); S.patrol = null; savePatrol(); $('#last-scan').className = 'last-scan hidden';
+      await clearPhotos();
       renderPatrol();
-      toast('Terkirim ke spreadsheet (baris ' + r.row + ', ' + r.filled + '/' + r.total + ' titik).', 'ok');
-    }catch(err){ toast('Gagal kirim: ' + err.message + ' — data tetap tersimpan, coba lagi.', 'bad'); }
+      toast('Terkirim ke spreadsheet (baris ' + r.row + ', ' + r.filled + '/' + r.total + ' titik' + (r.photos ? ', ' + r.photos + ' foto' : '') + ').', 'ok');
+    }catch(err){ renderPatrol(); toast('Gagal kirim: ' + err.message + ' — data tetap tersimpan, coba lagi.', 'bad'); }
   });
+});
+
+/* ================= FOTO =================
+   Foto diambil dari kamera yang sedang terbuka (layar penuh), diperkecil
+   ke maks. 1280 px + cap lokasi/waktu/petugas, lalu langsung diunggah ke
+   Google Drive. Foto yang belum terunggah disimpan di IndexedDB dan
+   dicoba lagi otomatis (termasuk saat menekan Kirim). */
+const idb = {
+  db:null,
+  open(){
+    if (this.db) return Promise.resolve(this.db);
+    return new Promise((res, rej) => {
+      try{
+        const r = indexedDB.open('rsfc', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('photos');
+        r.onsuccess = () => { this.db = r.result; res(this.db); };
+        r.onerror = () => rej(r.error);
+      }catch(e){ rej(e); }
+    });
+  },
+  async run(mode, fn){
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const t = db.transaction('photos', mode);
+      const req = fn(t.objectStore('photos'));
+      t.oncomplete = () => res(req ? req.result : undefined);
+      t.onerror = () => rej(t.error);
+    });
+  }
+};
+const photoMem = new Map();                       // salinan di memori (cadangan jika IndexedDB tidak tersedia)
+const pKey = (user, cp) => user + '|' + cp;
+async function pendPut(v){ photoMem.set(pKey(v.user, v.cp), v); try{ await idb.run('readwrite', s => s.put(v, pKey(v.user, v.cp))); }catch(e){} }
+async function pendDel(user, cp){ photoMem.delete(pKey(user, cp)); try{ await idb.run('readwrite', s => s.delete(pKey(user, cp))); }catch(e){} }
+async function pendList(user){
+  const map = new Map();
+  try{ ((await idb.run('readonly', s => s.getAll())) || []).forEach(v => map.set(pKey(v.user, v.cp), v)); }catch(e){}
+  photoMem.forEach((v, k) => map.set(k, v));
+  return [...map.values()].filter(v => v.user === user);
+}
+
+function hasPhoto(cp){
+  return !!(S.patrol && ((S.patrol.photos && S.patrol.photos[cp]) || (S.patrol.thumbs && S.patrol.thumbs[cp])));
+}
+function chipThumb(cp){
+  const t = S.patrol && S.patrol.thumbs && S.patrol.thumbs[cp];
+  return t ? `<img class="chip-thumb" src="${t}" alt="">` : '';
+}
+function chipPhoto(cp){
+  const st = S.photoBusy[cp];
+  if (st === 'uploading') return '<span class="ph wait">⏳ mengunggah</span>';
+  if (st === 'pending') return '<span class="ph wait">⚠ foto belum terunggah</span>';
+  if (S.patrol && S.patrol.photos && S.patrol.photos[cp]) return '<span class="ph">📷 tersimpan</span>';
+  return '<span class="ph add">+ foto</span>';
+}
+
+/* gambar → JPEG yang diperkecil; stamp = teks cap di pojok bawah */
+function drawScaled(src, w, h, max, q, stamp){
+  const s = Math.min(1, max / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * s); c.height = Math.round(h * s);
+  const x = c.getContext('2d');
+  x.drawImage(src, 0, 0, c.width, c.height);
+  if (stamp){
+    const fs = Math.max(14, Math.round(c.width / 42)), pad = Math.round(fs * 0.6);
+    x.font = `600 ${fs}px system-ui, sans-serif`;
+    const lines = stamp.split('\n');
+    const bh = lines.length * fs * 1.3 + pad * 1.4;
+    x.fillStyle = 'rgba(0,0,0,.55)'; x.fillRect(0, c.height - bh, c.width, bh);
+    x.fillStyle = '#fff'; x.textBaseline = 'top';
+    lines.forEach((l, i) => x.fillText(l, pad, c.height - bh + pad * 0.7 + i * fs * 1.3, c.width - pad * 2));
+  }
+  return c.toDataURL('image/jpeg', q);
+}
+function photoStamp(cp){
+  const d = new Date();
+  return cp + '\n' + d.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' }) + ' ' +
+    d.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) + ' · ' + (S.user ? S.user.nama : '');
+}
+
+async function uploadPhoto(v){
+  if (S.photoBusy[v.cp] === 'uploading') return null;     // versi terbaru akan diunggah setelah ini selesai
+  S.photoBusy[v.cp] = 'uploading'; renderPatrol();
+  let ok = false;
+  try{
+    const r = await api('apiUploadPhoto', S.token, { cp:v.cp, dataUrl:v.dataUrl, time:v.time });
+    if (S.photoVer[v.cp] === v.ver){
+      if (S.patrol && S.patrol.start === v.start){
+        S.patrol.photos = S.patrol.photos || {}; S.patrol.photos[v.cp] = r; savePatrol();
+      }
+      await pendDel(v.user, v.cp);
+    }
+    ok = true;
+  }catch(e){}
+  delete S.photoBusy[v.cp];
+  const latest = photoMem.get(pKey(v.user, v.cp));
+  if (latest && latest.ver !== v.ver) return uploadPhoto(latest);
+  if (!ok && photoMem.has(pKey(v.user, v.cp))) S.photoBusy[v.cp] = 'pending';
+  renderPatrol();
+  return ok;
+}
+
+async function savePhoto(cp, full, thumb){
+  if (!S.patrol || !S.patrol.scans[cp]) return;
+  S.patrol.thumbs = S.patrol.thumbs || {}; S.patrol.thumbs[cp] = thumb;
+  if (S.patrol.photos) delete S.patrol.photos[cp];
+  savePatrol();
+  const ver = Date.now() + Math.random();
+  S.photoVer[cp] = ver;
+  const v = { user:S.user.username, cp, dataUrl:full, time:new Date().toISOString(), start:S.patrol.start, ver };
+  await pendPut(v);
+  setLastScan('📷 Foto ' + cp + ' disimpan', 'ok', cp);
+  uploadPhoto(v);
+}
+
+/* unggah semua foto yang tertunda; hasil = jumlah yang masih gagal */
+async function flushPhotos(){
+  if (!S.patrol) return 0;
+  const list = await pendList(S.user.username);
+  let failed = 0;
+  for (const v of list){
+    if (v.start !== S.patrol.start){ await pendDel(v.user, v.cp); continue; }
+    if (!photoMem.has(pKey(v.user, v.cp))){ photoMem.set(pKey(v.user, v.cp), v); S.photoVer[v.cp] = v.ver; }
+    while (S.photoBusy[v.cp] === 'uploading') await new Promise(r => setTimeout(r, 300));
+    const cur = photoMem.get(pKey(v.user, v.cp));
+    if (!cur) continue;                                   // sudah terunggah selama menunggu
+    if (!(await uploadPhoto(cur))) failed++;
+  }
+  return failed;
+}
+async function clearPhotos(){
+  if (!S.user) return;
+  for (const v of await pendList(S.user.username)) await pendDel(v.user, v.cp);
+  S.photoBusy = {}; S.photoVer = {};
+}
+/* setelah login / buka ulang halaman: lanjutkan unggahan yang tertunda */
+async function restorePhotos(){
+  const user = S.user && S.user.username; if (!user) return;
+  const list = await pendList(user);
+  const keep = [];
+  for (const v of list){
+    if (!S.patrol || v.start !== S.patrol.start){ await pendDel(v.user, v.cp); continue; }
+    photoMem.set(pKey(v.user, v.cp), v); S.photoVer[v.cp] = v.ver; S.photoBusy[v.cp] = 'pending'; keep.push(v);
+  }
+  renderPatrol();
+  for (const v of keep){ delete S.photoBusy[v.cp]; await uploadPhoto(v); }
+}
+
+/* ---- layar foto ---- */
+function showReview(on){
+  $('#pm-live').classList.toggle('hidden', on);
+  $('#pm-review').classList.toggle('hidden', !on);
+  $('#pm-img').classList.toggle('hidden', !on);
+  $('#pm-video').classList.toggle('hidden', on);
+}
+async function openPhoto(cp){
+  if (!S.patrol || !S.patrol.scans[cp]) return;
+  S.photoCp = cp;
+  const noLive = !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia;
+  if (noLive || S.forceNative){ nativePhoto(); return; }   // harus langsung (masih dalam ketukan pengguna)
+  if (!cam.stream) await openCamera();
+  if (!cam.stream){
+    S.forceNative = true;
+    toast('Kamera tidak bisa dibuka di sini. Ketuk 📷 lagi untuk memakai aplikasi kamera HP.', 'bad');
+    return;
+  }
+  S.photoMode = true; S.shot = null;
+  $('#pm-title').textContent = cp;
+  const v = $('#pm-video'); v.srcObject = cam.stream;
+  showReview(false);
+  $('#pm').classList.remove('hidden'); document.body.style.overflow = 'hidden';
+  try{ await v.play(); }catch(e){}
+}
+function closePhoto(){
+  S.photoMode = false; S.shot = null;
+  $('#pm').classList.add('hidden'); document.body.style.overflow = '';
+  const v = $('#pm-video'); try{ v.srcObject = null; }catch(e){}
+}
+/* pakai aplikasi kamera bawaan HP (kualitas penuh / cadangan) */
+function nativePhoto(){
+  S.reopenCam = camScanning();
+  closePhoto();
+  if (S.reopenCam) closeCamera();                       // lepaskan kamera agar aplikasi kamera HP bisa memakainya
+  const inp = $('#file-photo'); inp.value = '';
+  inp.click();
+  window.addEventListener('focus', () => setTimeout(() => {
+    if (S.reopenCam && !camScanning() && !inp.files.length){ S.reopenCam = false; openCamera(); }
+  }, 1200), { once:true });
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-photo]');
+  if (b && S.patrol) openPhoto(b.dataset.photo);
+});
+$('#pm-close').addEventListener('click', closePhoto);
+$('#pm-native').addEventListener('click', nativePhoto);
+$('#pm-shot').addEventListener('click', () => {
+  const v = $('#pm-video');
+  if (!v.videoWidth) return toast('Kamera belum siap, coba lagi.', 'bad');
+  const stamp = photoStamp(S.photoCp);
+  S.shot = {
+    full: drawScaled(v, v.videoWidth, v.videoHeight, 1280, 0.75, stamp),
+    thumb: drawScaled(v, v.videoWidth, v.videoHeight, 120, 0.6)
+  };
+  $('#pm-img').src = S.shot.full;
+  showReview(true);
+});
+$('#pm-retake').addEventListener('click', () => { S.shot = null; showReview(false); });
+$('#pm-use').addEventListener('click', () => {
+  if (S.shot) savePhoto(S.photoCp, S.shot.full, S.shot.thumb);
+  closePhoto();
+});
+$('#file-photo').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  const reopen = S.reopenCam; S.reopenCam = false;
+  if (file && S.photoCp){
+    try{
+      const bmp = await createImageBitmap(file);
+      await savePhoto(S.photoCp,
+        drawScaled(bmp, bmp.width, bmp.height, 1280, 0.75, photoStamp(S.photoCp)),
+        drawScaled(bmp, bmp.width, bmp.height, 120, 0.6));
+    }catch(err){ toast('Foto tidak bisa dibaca. Coba lagi.', 'bad'); }
+  }
+  e.target.value = '';
+  if (reopen) openCamera();
 });
 
 /* ---------- laporan ---------- */
@@ -712,7 +982,8 @@ function repCard(r){
   const full = r.total && r.filled === r.total;
   const selesai = r.selesai ? String(r.selesai).slice(0,5) : '';
   const dur = selesai ? durasi(r.jam, selesai) : null;
-  const sub = [esc(r.tanggal), esc(r.jam) + (selesai ? '–' + esc(selesai) : ''), dur].filter(Boolean).join(' · ');
+  const nFoto = Object.keys(r.photos || {}).length;
+  const sub = [esc(r.tanggal), esc(r.jam) + (selesai ? '–' + esc(selesai) : ''), dur, nFoto ? nFoto + ' foto' : ''].filter(Boolean).join(' · ');
   return `<div class="rep">
     <div class="rep-top"><div><div class="rep-name">${esc(r.nama)}</div><div class="rep-sub">${sub}</div></div>
       <span class="badge ${full ? 'b-aktif' : 'b-menunggu'}">${full ? 'Lengkap' : 'Kurang ' + (r.total - r.filled)}</span></div>
@@ -725,6 +996,7 @@ function repCard(r){
 function floorTable(r){
   const miss = new Set((r.missing || []).map(norm));
   const times = {}; Object.keys(r.times || {}).forEach(k => times[norm(k)] = r.times[k]);
+  const photos = {}; Object.keys(r.photos || {}).forEach(k => photos[norm(k)] = r.photos[k]);
   const groups = groupCps();
   if (!groups.length){
     return r.missing && r.missing.length ? '<p class="muted">Belum di-scan: ' + r.missing.map(esc).join(', ') + '</p>' : '<p class="muted">Semua titik sudah di-scan.</p>';
@@ -738,11 +1010,13 @@ function floorTable(r){
       const it = g.items.find(i => i.label === c);
       if (!it) return '<td class="muted">–</td>';
       if (miss.has(norm(it.cp))) return '<td class="n">✗</td>';
-      const t = times[norm(it.cp)];
-      return `<td class="y">✓${t ? '<small>' + esc(String(t).slice(0,5)) + '</small>' : ''}</td>`;
+      const t = times[norm(it.cp)], ph = photos[norm(it.cp)];
+      const mark = ph ? `<a class="ph-link" href="${esc(ph)}" target="_blank" rel="noopener" title="Lihat foto">✓ 📷</a>` : '✓';
+      return `<td class="y">${mark}${t ? '<small>' + esc(String(t).slice(0,5)) + '</small>' : ''}</td>`;
     }).join('') + '</tr>';
   }).join('');
-  return `<div class="fgrid-wrap"><table class="fgrid"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+  const legend = Object.keys(photos).length ? '<p class="muted" style="margin:6px 0 0">📷 = ada foto, ketuk untuk membuka.</p>' : '';
+  return `<div class="fgrid-wrap"><table class="fgrid"><thead>${head}</thead><tbody>${body}</tbody></table></div>${legend}`;
 }
 
 $('#btn-reload-rep').addEventListener('click', loadReports);
