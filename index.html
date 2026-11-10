@@ -726,7 +726,7 @@ $('#btn-submit').addEventListener('click', e => {
     try{
       btn.textContent = 'Mengunggah foto…';
       const failed = await flushPhotos();
-      if (failed && !confirm(failed + ' foto belum terunggah (cek sinyal). Kirim tanpa foto tersebut?')){ renderPatrol(); return; }
+      if (failed && !confirm(failed + ' foto belum terunggah. Tekan BATAL untuk menunggu dan mencoba lagi (foto tetap tersimpan di HP), atau OK untuk kirim tanpa foto tersebut (foto akan dihapus).')){ renderPatrol(); return; }
       btn.textContent = 'Mengirim…';
       const r = await api('apiSubmitPatrol', S.token, { start:S.patrol.start, scans:S.patrol.scans, photos:S.patrol.photos || {} });
       closeCamera(); S.patrol = null; savePatrol(); $('#last-scan').className = 'last-scan hidden';
@@ -828,7 +828,12 @@ async function uploadPhoto(v){
       await pendDel(v.user, v.cp);
     }
     ok = true;
-  }catch(e){}
+  }catch(e){
+    const m = String(e && e.message || '');
+    if (/tidak dikenal/i.test(m)){
+      if (!S.photoOldWarned){ S.photoOldWarned = true; toast('Server belum diperbarui untuk foto. Admin: pasang Code.gs terbaru & deploy versi baru. Foto aman tersimpan di HP.', 'bad'); }
+    } else if (!S.photoErrWarned){ S.photoErrWarned = true; toast('Foto belum terunggah: ' + m + ' — akan dicoba lagi.', 'bad'); }
+  }
   delete S.photoBusy[v.cp];
   const latest = photoMem.get(pKey(v.user, v.cp));
   if (latest && latest.ver !== v.ver) return uploadPhoto(latest);
