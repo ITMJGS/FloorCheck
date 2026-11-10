@@ -80,6 +80,15 @@
   #pm-native{position:absolute;left:0}
   #pm-review{width:100%;max-width:420px}
   .ph-link{color:var(--ok);text-decoration:none}
+  .rep-photos{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  .rep-photos-h{font-size:13px;font-weight:700;margin-bottom:8px}
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+  .pitem{display:block;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+  .pitem img,.pitem .ph-ph{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--bg)}
+  .pitem .ph-ph{display:grid;place-items:center;font-size:22px}
+  .pitem span{display:block;padding:5px 7px;font-size:11.5px;line-height:1.3;font-weight:600}
+  .pitem small{display:block;font-weight:400;color:var(--muted)}
+  .pitem em{display:block;font-style:normal;color:var(--brand);font-weight:600;margin-top:2px}
   .chip small{display:block;font-weight:400;font-size:11px;margin-top:2px}
   .bottombar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;justify-content:center;z-index:8}
   .bottombar .btn{flex:1;max-width:360px}
@@ -131,6 +140,9 @@
     .print-only{display:block!important}
     .rep{box-shadow:none;border:1px solid var(--line);padding:10px 12px}
     .rep summary{display:none}
+    .pgrid{grid-template-columns:repeat(6,1fr)}
+    .pitem em{font-size:0;word-break:break-all;font-weight:400}
+    .pitem em::after{content:attr(data-url);font-size:8px}
     .stat{border:1px solid var(--line)}
   }
 </style>
@@ -989,8 +1001,30 @@ function repCard(r){
       <span class="badge ${full ? 'b-aktif' : 'b-menunggu'}">${full ? 'Lengkap' : 'Kurang ' + (r.total - r.filled)}</span></div>
     <div class="rep-bar"><div class="progress"><i class="${full ? '' : 'warn'}" style="width:${pct}%"></i></div>
       <span class="rep-pct">${r.filled}/${r.total}</span></div>
+    ${photoLinks(r)}
     <details><summary>Rincian per lantai</summary>${floorTable(r)}</details>
   </div>`;
+}
+
+/* daftar foto (thumbnail + link) untuk satu patroli */
+function driveId(url){ const m = String(url).match(/\/d\/([\w-]+)|[?&]id=([\w-]+)/); return m ? (m[1] || m[2]) : ''; }
+function cpParts(cp){
+  const m = cp.match(/^(?:lantai|lt\.?|floor)?\s*(\d+[A-Za-z]?)\s+(.+)$/i);
+  return m ? { floor:'Lt ' + m[1], label:m[2].trim() } : { floor:'', label:cp };
+}
+function photoLinks(r){
+  const ph = r.photos || {}, keys = Object.keys(ph);
+  if (!keys.length) return '';
+  const order = S.cps.map(norm);
+  keys.sort((a,b) => { const x = order.indexOf(norm(a)), y = order.indexOf(norm(b)); return (x < 0 ? 999 : x) - (y < 0 ? 999 : y); });
+  const items = keys.map(k => {
+    const url = ph[k], id = driveId(url), p = cpParts(k), t = (r.times || {})[k];
+    const img = id ? `<img src="https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w320" alt="Foto ${esc(k)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=ph-ph>📷</div>'">`
+                   : '<div class="ph-ph">📷</div>';
+    return `<a class="pitem" href="${esc(url)}" target="_blank" rel="noopener">${img}
+      <span>${esc(p.floor ? p.floor + ' · ' + p.label : p.label)}${t ? '<small>' + esc(String(t).slice(0,5)) + '</small>' : ''}<em data-url="${esc(url)}">Buka foto ↗</em></span></a>`;
+  }).join('');
+  return `<div class="rep-photos"><div class="rep-photos-h">📷 Foto (${keys.length})</div><div class="pgrid">${items}</div></div>`;
 }
 
 function floorTable(r){
