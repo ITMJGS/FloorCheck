@@ -1016,7 +1016,12 @@ async function loadReports(){
   const seq = ++repSeq;
   $('#rep-list').innerHTML = '<div class="rep empty">Memuat laporan…</div>';
   try{
-    const res = await api('apiReports', S.token, { from:f, to:to, nama:nama, limit:500 });
+    let res;
+    try{ res = await api('apiReports', S.token, { from:f, to:to, nama:nama, limit:500 }); }
+    catch(err){
+      if (!S.token) throw err;                         // sesi habis → sudah diarahkan ke login
+      res = await api('apiReports', S.token, 300);     // server (Code.gs) versi lama: ambil 300 terakhir, saring di HP
+    }
     if (seq !== repSeq) return;                       // ada permintaan yang lebih baru
     let rows, names;
     if (Array.isArray(res)){                          // server versi lama: saring di HP
