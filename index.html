@@ -888,6 +888,18 @@ async function restorePhotos(){
   for (const v of keep){ delete S.photoBusy[v.cp]; await uploadPhoto(v); }
 }
 
+/* coba unggah ulang foto tertunda: tiap 30 detik & saat aplikasi dibuka kembali */
+async function retryPendingPhotos(){
+  if (!S.patrol || !S.user) return;
+  for (const [k, v] of photoMem){
+    if (v.user !== S.user.username || v.start !== S.patrol.start) continue;
+    if (S.photoBusy[v.cp] === 'pending'){ delete S.photoBusy[v.cp]; await uploadPhoto(v); }
+  }
+}
+setInterval(retryPendingPhotos, 30000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') retryPendingPhotos(); });
+window.addEventListener('online', retryPendingPhotos);
+
 /* ---- layar foto ---- */
 function showReview(on){
   $('#pm-live').classList.toggle('hidden', on);
