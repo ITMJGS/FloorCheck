@@ -109,6 +109,15 @@
   .rep{background:var(--card);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,30,50,.06);break-inside:avoid}
   .rep-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
   .rep-name{font-weight:700}
+  .loglist{margin-top:12px}
+  .lrow{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .lrow:last-child{border-bottom:0}
+  .lrow time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:2px}
+  .lrow .who{font-weight:600;font-size:14px}
+  .lrow .det{grid-column:2;font-size:13px;color:var(--muted);word-break:break-word}
+  .lday{font-size:12px;font-weight:700;color:var(--brand);margin:14px 0 2px;text-transform:uppercase;letter-spacing:.3px}
+  .lbadge{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:999px;margin-left:6px;background:#e8eef6;color:var(--brand)}
+  .lbadge.bad{background:var(--bad-bg);color:var(--bad)} .lbadge.ok{background:var(--ok-bg);color:var(--ok)} .lbadge.warn{background:var(--warn-bg);color:var(--warn)}
   .perm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
   .perm-grid label{display:flex;align-items:center;gap:8px;margin:0;padding:9px 10px;border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:14px;cursor:pointer;background:#fff}
   .perm-grid label:has(input:checked){border-color:var(--brand);background:#eef3fa}
@@ -160,6 +169,7 @@
     .pitem em{font-size:0;word-break:break-all;font-weight:400}
     .pitem em::after{content:attr(data-url);font-size:8px}
     .stat{border:1px solid var(--line)}
+    .lrow{padding:5px 0;break-inside:avoid} .lrow .det a{color:inherit}
     .up-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:10px}
     .up-head h1{font-size:18px;margin:0} .up-head div{font-size:11px;color:var(--muted);text-align:right}
     .up-sum{font-size:12px;margin:0 0 8px}
@@ -315,6 +325,36 @@
     <div class="print-only" id="u-print"></div>
   </section>
 
+  <!-- LOG AKTIVITAS -->
+  <section id="v-logs" class="hidden">
+    <div class="card">
+      <div class="rep-title">
+        <h2 style="margin:0">Log aktivitas</h2>
+        <div class="no-print rep-actions">
+          <button class="btn sm" id="btn-reload-log">Muat ulang</button>
+          <button class="btn sm primary" id="btn-print-log">Cetak</button>
+        </div>
+      </div>
+      <div class="row no-print" style="flex-wrap:nowrap">
+        <div style="min-width:0"><label>Dari tanggal</label><input type="date" id="log-from"></div>
+        <div style="min-width:0"><label>Sampai tanggal</label><input type="date" id="log-to"></div>
+      </div>
+      <div class="quick no-print" id="log-quick">
+        <button type="button" data-q="today">Hari ini</button>
+        <button type="button" data-q="yesterday">Kemarin</button>
+        <button type="button" data-q="7">7 hari</button>
+        <button type="button" data-q="30">30 hari</button>
+        <button type="button" data-q="all">Semua</button>
+      </div>
+      <div class="row no-print">
+        <div><label>Pengguna</label><select id="log-name"><option value="">Semua pengguna</option></select></div>
+        <div><label>Aktivitas</label><select id="log-act"><option value="">Semua aktivitas</option></select></div>
+      </div>
+      <p class="muted print-only" id="log-filter-text"></p>
+      <div id="log-list" class="loglist"></div>
+    </div>
+  </section>
+
   <!-- QR CODE -->
   <section id="v-qr" class="hidden">
     <div class="card">
@@ -359,7 +399,8 @@ const PERM_LIST = [
   ['cetak_laporan', 'Cetak laporan', 'Cetak laporan'],
   ['kelola_pengguna', 'Kelola pengguna', 'Kelola pengguna'],
   ['setujui', 'Setujui pendaftaran', 'Setujui'],
-  ['qr', 'Cetak QR Code', 'QR Code']
+  ['qr', 'Cetak QR Code', 'QR Code'],
+  ['log', 'Lihat log aktivitas', 'Log']
 ];
 const ROLE_PERMS = {
   admin: PERM_LIST.map(p => p[0]),
@@ -429,13 +470,14 @@ function beep(){
 
 /* ---------- views ---------- */
 function show(view){
-  ['login','patrol','reports','users','qr','none'].forEach(v => $('#v-'+v).classList.toggle('hidden', v !== view));
+  ['login','patrol','reports','users','qr','logs','none'].forEach(v => $('#v-'+v).classList.toggle('hidden', v !== view));
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   if (S.view === 'patrol' && view !== 'patrol') closeCamera();
   S.view = view;
   $('#patrol-bar').classList.toggle('hidden', !(view === 'patrol' && S.patrol));
   if (view === 'reports') loadReports();
   if (view === 'users') loadUsers();
+  if (view === 'logs') loadLogs();
 }
 
 function enterApp(){
@@ -447,6 +489,7 @@ function enterApp(){
   if (can('laporan')) tabs.push(['reports','Laporan']);
   if (can('kelola_pengguna') || can('setujui')) tabs.push(['users','Pengguna']);
   if (can('qr')) tabs.push(['qr','QR Code']);
+  if (can('log')) tabs.push(['logs','Log']);
   $('#btn-print-rep').classList.toggle('hidden', !can('cetak_laporan'));
   $('#f-user').classList.toggle('hidden', !can('kelola_pengguna'));
   $('#btn-print-users').classList.toggle('hidden', !can('kelola_pengguna'));
@@ -1309,6 +1352,71 @@ $('#f-user').addEventListener('submit', e => {
     }catch(err){ toast(err.message, 'bad'); }
   });
 });
+
+/* ---------- log aktivitas ---------- */
+let logSeq = 0, logInit = false;
+function logRange(q){
+  const t = todayISO();
+  const m = { today:[t,t], yesterday:[isoOffset(-1),isoOffset(-1)], '7':[isoOffset(-6),t], '30':[isoOffset(-29),t], all:['',''] };
+  return m[q];
+}
+function markLogQuick(){
+  const f = $('#log-from').value, to = $('#log-to').value;
+  document.querySelectorAll('#log-quick button').forEach(b => { const m = logRange(b.dataset.q); b.classList.toggle('active', m[0] === f && m[1] === to); });
+}
+function logBadge(a){
+  const k = norm(a);
+  const cls = /gagal|hapus|dicabut/.test(k) ? 'bad' : /login$|setujui|tambah|kirim/.test(k) ? 'ok' : /ubah|daftar/.test(k) ? 'warn' : '';
+  return `<span class="lbadge ${cls}">${esc(a)}</span>`;
+}
+function linkify(s){
+  return esc(s).replace(/https:\/\/drive\.google\.com\/[\w\/?=&.-]+/g, u => `<a href="${u}" target="_blank" rel="noopener">buka foto ↗</a>`);
+}
+async function loadLogs(){
+  if (!logInit){ const r = logRange('today'); $('#log-from').value = r[0]; $('#log-to').value = r[1]; logInit = true; }
+  markLogQuick();
+  let f = $('#log-from').value, to = $('#log-to').value;
+  if (f && to && f > to){ [f, to] = [to, f]; $('#log-from').value = f; $('#log-to').value = to; markLogQuick(); }
+  const nama = $('#log-name').value, aksi = $('#log-act').value;
+  const seq = ++logSeq, box = $('#log-list');
+  box.innerHTML = '<p class="muted">Memuat log…</p>';
+  try{
+    const res = await api('apiLogs', S.token, { from:f, to:to, nama:nama, aksi:aksi, limit:500 });
+    if (seq !== logSeq) return;
+    const fill = (sel, list, cur, all) => {
+      sel.innerHTML = `<option value="">${all}</option>` + list.map(x => `<option>${esc(x)}</option>`).join('');
+      sel.value = list.includes(cur) ? cur : '';
+    };
+    fill($('#log-name'), res.names || [], nama, 'Semua pengguna');
+    fill($('#log-act'), res.actions || [], aksi, 'Semua aktivitas');
+    $('#log-filter-text').textContent = 'Tanggal: ' + fmtRange(f, to) + ' · Pengguna: ' + (nama || 'semua') +
+      ' · Aktivitas: ' + (aksi || 'semua') + ' · Dicetak ' + new Date().toLocaleString('id-ID');
+    const rows = res.rows || [];
+    if (!rows.length){ box.innerHTML = '<p class="muted" style="text-align:center;padding:16px 0">Tidak ada aktivitas untuk filter ini.</p>'; return; }
+    let day = '', html = '';
+    rows.forEach(r => {
+      const d = r.waktu.slice(0, 10);
+      if (d !== day){ day = d; html += `<div class="lday">${esc(fmtDate(dmyToISO(d) + 'T00:00'))}</div>`; }
+      html += `<div class="lrow"><time>${esc(r.waktu.slice(11, 19))}</time>
+        <div><span class="who">${esc(r.nama || r.username || '—')}</span>${logBadge(r.aksi)}</div>
+        ${r.detail ? `<div class="det">${linkify(r.detail)}</div>` : ''}</div>`;
+    });
+    if (res.truncated) html += '<p class="rep-note">Ditampilkan 500 aktivitas terbaru. Persempit tanggal atau filter untuk melihat sisanya.</p>';
+    box.innerHTML = html;
+  }catch(err){
+    if (seq !== logSeq) return;
+    box.innerHTML = '<p class="muted">' + esc(/tidak dikenal/i.test(err.message)
+      ? 'Fitur log belum aktif di server. Admin: pasang Code.gs terbaru lalu Deploy → Manage deployments → New version.'
+      : err.message) + '</p>';
+  }
+}
+$('#log-quick').addEventListener('click', e => {
+  const b = e.target.closest('button[data-q]'); if (!b) return;
+  const r = logRange(b.dataset.q); $('#log-from').value = r[0]; $('#log-to').value = r[1]; loadLogs();
+});
+['#log-from', '#log-to', '#log-name', '#log-act'].forEach(s => $(s).addEventListener('change', loadLogs));
+$('#btn-reload-log').addEventListener('click', loadLogs);
+$('#btn-print-log').addEventListener('click', () => setTimeout(() => window.print(), 100));
 
 /* ---------- QR code ---------- */
 $('#btn-qr-gen').addEventListener('click', () => {
