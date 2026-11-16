@@ -148,6 +148,14 @@
     .pitem em{font-size:0;word-break:break-all;font-weight:400}
     .pitem em::after{content:attr(data-url);font-size:8px}
     .stat{border:1px solid var(--line)}
+    .up-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:10px}
+    .up-head h1{font-size:18px;margin:0} .up-head div{font-size:11px;color:var(--muted);text-align:right}
+    .up-sum{font-size:12px;margin:0 0 8px}
+    .up-table{width:100%;border-collapse:collapse;font-size:12px}
+    .up-table th,.up-table td{border:1px solid #c9ced8;padding:6px 8px;text-align:left}
+    .up-table th{background:#eef1f5;color:var(--ink)}
+    .up-table td.c{text-align:center;width:32px}
+    .up-table tr{break-inside:avoid}
   }
 </style>
 </head>
@@ -255,7 +263,7 @@
 
   <!-- PENGGUNA -->
   <section id="v-users" class="hidden">
-    <form class="card" id="f-user">
+    <form class="card no-print" id="f-user">
       <h2 id="u-title">Tambah pengguna</h2>
       <div class="row">
         <div><label>Username</label><input id="u-username" required></div>
@@ -273,13 +281,17 @@
         <button type="button" class="btn" id="btn-u-reset">Batal</button>
       </div>
     </form>
-    <div class="card">
-      <div class="row" style="align-items:center"><h2 style="margin:0">Daftar pengguna</h2>
-        <button class="btn sm" id="btn-reload-users" style="flex:none">Muat ulang</button></div>
+    <div class="card no-print">
+      <div class="rep-title"><h2 style="margin:0">Daftar pengguna</h2>
+        <div class="rep-actions">
+          <button class="btn sm" id="btn-reload-users">Muat ulang</button>
+          <button class="btn sm primary" id="btn-print-users">Cetak</button>
+        </div></div>
       <div class="table-wrap" style="margin-top:10px"><table>
         <thead><tr><th>Pengguna</th><th>Role</th><th>Status</th><th></th></tr></thead>
         <tbody id="u-tbody"></tbody></table></div>
     </div>
+    <div class="print-only" id="u-print"></div>
   </section>
 
   <!-- QR CODE -->
@@ -1174,6 +1186,30 @@ function resetUserForm(){
 }
 $('#btn-u-reset').addEventListener('click', resetUserForm);
 $('#btn-reload-users').addEventListener('click', loadUsers);
+
+/* cetak daftar pengguna (tanpa password) */
+function buildUserPrint(){
+  const rank = { admin:0, supervisor:1, petugas:2 };
+  const list = usersCache.slice().sort((a,b) =>
+    (rank[a.role] ?? 9) - (rank[b.role] ?? 9) || String(a.nama).localeCompare(String(b.nama), 'id'));
+  const count = st => list.filter(u => norm(u.status) === st).length;
+  const byRole = r => list.filter(u => u.role === r).length;
+  $('#u-print').innerHTML = `
+    <div class="up-head"><h1>Daftar Pengguna — Room Service Floor Check</h1>
+      <div>Dicetak ${esc(new Date().toLocaleString('id-ID'))}<br>oleh ${esc(S.user ? S.user.nama : '')}</div></div>
+    <p class="up-sum">Total ${list.length} pengguna · Aktif ${count('aktif')} · Menunggu ${count('menunggu')} · Nonaktif ${count('nonaktif')}
+      &nbsp;|&nbsp; Admin ${byRole('admin')} · Supervisor ${byRole('supervisor')} · Petugas ${byRole('petugas')}</p>
+    <table class="up-table"><thead><tr><th class="c">No</th><th>Nama</th><th>Username</th><th>Role</th><th>Status</th><th>Terdaftar</th></tr></thead>
+    <tbody>${list.map((u,i) => `<tr><td class="c">${i+1}</td><td>${esc(u.nama)}</td><td>${esc(u.username)}</td>
+      <td>${esc(ROLE_LABEL[u.role] || u.role)}</td><td>${esc(u.status)}</td><td>${esc(u.dibuat || '')}</td></tr>`).join('')
+      || '<tr><td colspan="6">Belum ada pengguna.</td></tr>'}</tbody></table>`;
+}
+$('#btn-print-users').addEventListener('click', async e => {
+  if (!usersCache.length){ await withBusy(e.currentTarget, loadUsers); }
+  if (!usersCache.length) return toast('Daftar pengguna belum termuat.', 'bad');
+  buildUserPrint();
+  setTimeout(() => window.print(), 200);
+});
 
 $('#u-tbody').addEventListener('click', async e => {
   const b = e.target.closest('button[data-act]'); if (!b) return;
