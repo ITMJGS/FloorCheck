@@ -109,6 +109,18 @@
   .rep{background:var(--card);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,30,50,.06);break-inside:avoid}
   .rep-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
   .rep-name{font-weight:700}
+  .perm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+  .perm-grid label{display:flex;align-items:center;gap:8px;margin:0;padding:9px 10px;border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:14px;cursor:pointer;background:#fff}
+  .perm-grid label:has(input:checked){border-color:var(--brand);background:#eef3fa}
+  .perm-grid input{width:auto;margin:0;accent-color:var(--brand)}
+  .perm-list{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4}
+  .ulist{margin-top:8px}
+  .urow{border-bottom:1px solid var(--line);padding:12px 0}
+  .urow:last-child{border-bottom:0}
+  .urow-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .urow-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
+  .ulist .empty-row{color:var(--muted);padding:12px 0}
+  @media (max-width:380px){.perm-grid{grid-template-columns:1fr}}
   .quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
   .quick button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
   .quick button.active{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
@@ -230,6 +242,14 @@
     </div>
   </section>
 
+  <!-- TANPA AKSES -->
+  <section id="v-none" class="hidden">
+    <div class="card" style="text-align:center">
+      <h2>Belum ada hak akses</h2>
+      <p class="muted">Akun Anda sudah aktif, tetapi belum diberi hak akses ke menu apa pun. Hubungi admin.</p>
+    </div>
+  </section>
+
   <!-- LAPORAN -->
   <section id="v-reports" class="hidden">
     <div class="card">
@@ -275,6 +295,9 @@
         <div><label>Status</label><select id="u-status">
           <option>Aktif</option><option>Nonaktif</option><option>Menunggu</option></select></div>
       </div>
+      <label>Hak akses</label>
+      <div class="perm-grid" id="u-perms"></div>
+      <p class="muted" style="margin:6px 0 0">Centang awal mengikuti role. Mengganti role akan mengisi ulang centang.</p>
       <label id="u-pass-label">Password</label><input id="u-password" type="password" autocomplete="new-password">
       <div class="row" style="margin-top:14px">
         <button class="btn primary">Simpan</button>
@@ -287,9 +310,7 @@
           <button class="btn sm" id="btn-reload-users">Muat ulang</button>
           <button class="btn sm primary" id="btn-print-users">Cetak</button>
         </div></div>
-      <div class="table-wrap" style="margin-top:10px"><table>
-        <thead><tr><th>Pengguna</th><th>Role</th><th>Status</th><th></th></tr></thead>
-        <tbody id="u-tbody"></tbody></table></div>
+      <div class="ulist" id="u-tbody"></div>
     </div>
     <div class="print-only" id="u-print"></div>
   </section>
@@ -330,6 +351,24 @@ const $ = s => document.querySelector(s);
 const S = { token:null, user:null, cps:[], patrol:null, lastText:'', lastAt:0, view:null,
   photoBusy:{}, photoVer:{}, photoMode:false, photoCp:null, shot:null, forceNative:false, reopenCam:false };
 const ROLE_LABEL = { admin:'Admin', supervisor:'Supervisor', petugas:'Petugas' };
+/* hak akses per pengguna — harus sama dengan PERMS / ROLE_PERMS di Code.gs */
+const PERM_LIST = [
+  ['patroli', 'Patroli (scan QR)', 'Patroli'],
+  ['foto', 'Ambil foto', 'Foto'],
+  ['laporan', 'Lihat laporan', 'Laporan'],
+  ['cetak_laporan', 'Cetak laporan', 'Cetak laporan'],
+  ['kelola_pengguna', 'Kelola pengguna', 'Kelola pengguna'],
+  ['setujui', 'Setujui pendaftaran', 'Setujui'],
+  ['qr', 'Cetak QR Code', 'QR Code']
+];
+const ROLE_PERMS = {
+  admin: PERM_LIST.map(p => p[0]),
+  supervisor: ['patroli', 'foto', 'laporan', 'cetak_laporan'],
+  petugas: ['patroli', 'foto']
+};
+function userPerms(u){ return Array.isArray(u && u.akses) ? u.akses : (ROLE_PERMS[u && u.role] || []); }
+function can(p){ return userPerms(S.user).includes(p); }
+function permNames(list){ return PERM_LIST.filter(p => list.includes(p[0])).map(p => p[2]).join(', ') || 'Tidak ada akses'; }
 
 /* ---------- util ---------- */
 const store = {
@@ -390,7 +429,7 @@ function beep(){
 
 /* ---------- views ---------- */
 function show(view){
-  ['login','patrol','reports','users','qr'].forEach(v => $('#v-'+v).classList.toggle('hidden', v !== view));
+  ['login','patrol','reports','users','qr','none'].forEach(v => $('#v-'+v).classList.toggle('hidden', v !== view));
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   if (S.view === 'patrol' && view !== 'patrol') closeCamera();
   S.view = view;
@@ -403,16 +442,21 @@ function enterApp(){
   store.set('rsfc_token', S.token);
   $('#topbar').classList.remove('hidden');
   $('#who').textContent = S.user.nama + ' · ' + (ROLE_LABEL[S.user.role] || S.user.role);
-  const tabs = [['patrol','Patroli']];
-  if (S.user.role === 'admin' || S.user.role === 'supervisor') tabs.push(['reports','Laporan']);
-  if (S.user.role === 'admin') tabs.push(['users','Pengguna'], ['qr','QR Code']);
+  const tabs = [];
+  if (can('patroli')) tabs.push(['patrol','Patroli']);
+  if (can('laporan')) tabs.push(['reports','Laporan']);
+  if (can('kelola_pengguna') || can('setujui')) tabs.push(['users','Pengguna']);
+  if (can('qr')) tabs.push(['qr','QR Code']);
+  $('#btn-print-rep').classList.toggle('hidden', !can('cetak_laporan'));
+  $('#f-user').classList.toggle('hidden', !can('kelola_pengguna'));
+  $('#btn-print-users').classList.toggle('hidden', !can('kelola_pengguna'));
   const nav = $('#tabs');
   nav.innerHTML = tabs.map(([v,l]) => `<button data-view="${v}">${l}</button>`).join('');
   nav.classList.toggle('hidden', tabs.length < 2);
   S.patrol = store.get('rsfc_patrol_' + S.user.username);
   S.photoBusy = {}; S.photoVer = {};
   restorePhotos();
-  show('patrol');
+  show(tabs.length ? tabs[0][0] : 'none');
   loadCheckpoints();
 }
 
@@ -506,14 +550,16 @@ function renderPatrol(){
     const title = /^\d+$/.test(g.floor) ? 'Lantai ' + g.floor : g.floor;
     return `<div class="floor"><div class="floor-head"><span>${esc(title)}</span><span class="muted">${n}/${g.items.length}</span></div>
       <div class="chips">${g.items.map(i => scans[i.cp]
-        ? `<button type="button" class="chip done" data-photo="${esc(i.cp)}">${chipThumb(i.cp)}✓ ${esc(i.label)}<small>${fmtTime(scans[i.cp])}</small>${chipPhoto(i.cp)}</button>`
+        ? (can('foto')
+          ? `<button type="button" class="chip done" data-photo="${esc(i.cp)}">${chipThumb(i.cp)}✓ ${esc(i.label)}<small>${fmtTime(scans[i.cp])}</small>${chipPhoto(i.cp)}</button>`
+          : `<div class="chip done">✓ ${esc(i.label)}<small>${fmtTime(scans[i.cp])}</small></div>`)
         : `<div class="chip">${esc(i.label)}<small>belum</small></div>`).join('')}</div></div>`;
   }).join('');
 }
 
 function setLastScan(msg, type, photoCp){
   const el = $('#last-scan');
-  el.innerHTML = esc(msg) + (photoCp
+  el.innerHTML = esc(msg) + (photoCp && can('foto')
     ? `<button type="button" class="btn accent" data-photo="${esc(photoCp)}">📷 ${hasPhoto(photoCp) ? 'Ganti foto' : 'Ambil foto'}</button>` : '');
   el.className = 'last-scan ' + type;
 }
@@ -956,7 +1002,7 @@ function nativePhoto(){
 
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-photo]');
-  if (b && S.patrol) openPhoto(b.dataset.photo);
+  if (b && S.patrol && can('foto')) openPhoto(b.dataset.photo);
 });
 $('#pm-close').addEventListener('click', closePhoto);
 $('#pm-native').addEventListener('click', nativePhoto);
@@ -1162,28 +1208,39 @@ $('#btn-print-rep').addEventListener('click', () => {
 /* ---------- pengguna ---------- */
 let usersCache = [];
 async function loadUsers(){
-  const tb = $('#u-tbody'); tb.innerHTML = '<tr><td colspan="4" class="muted">Memuat…</td></tr>';
+  const tb = $('#u-tbody'); tb.innerHTML = '<div class="empty-row">Memuat…</div>';
   try{
     usersCache = await api('apiListUsers', S.token);
     const order = { menunggu:0, aktif:1, nonaktif:2 };
     usersCache.sort((a,b) => (order[norm(a.status)] ?? 3) - (order[norm(b.status)] ?? 3));
     tb.innerHTML = usersCache.map(u => {
       const st = norm(u.status);
-      return `<tr><td><b>${esc(u.nama)}</b><div class="muted">${esc(u.username)}</div></td>
-        <td><span class="badge b-role">${esc(ROLE_LABEL[u.role] || u.role)}</span></td>
-        <td><span class="badge b-${esc(st)}">${esc(u.status)}</span></td>
-        <td style="white-space:nowrap;text-align:right">
-          ${st === 'menunggu' ? `<button class="btn ok sm" data-act="approve" data-u="${esc(u.username)}">Setujui</button>` : ''}
-          <button class="btn sm" data-act="edit" data-u="${esc(u.username)}">Ubah</button>
-          <button class="btn danger sm" data-act="del" data-u="${esc(u.username)}">Hapus</button></td></tr>`;
-    }).join('') || '<tr><td colspan="4" class="muted">Belum ada pengguna.</td></tr>';
-  }catch(err){ tb.innerHTML = '<tr><td colspan="4" class="muted">' + esc(err.message) + '</td></tr>'; }
+      const acts = (st === 'menunggu' && (can('setujui') || can('kelola_pengguna')) ? `<button class="btn ok sm" data-act="approve" data-u="${esc(u.username)}">Setujui</button>` : '') +
+        (can('kelola_pengguna') ? `<button class="btn sm" data-act="edit" data-u="${esc(u.username)}">Ubah</button>
+          <button class="btn danger sm" data-act="del" data-u="${esc(u.username)}">Hapus</button>` : '');
+      return `<div class="urow">
+        <div class="urow-top"><div><b>${esc(u.nama)}</b><div class="muted">${esc(u.username)}</div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            <span class="badge b-role">${esc(ROLE_LABEL[u.role] || u.role)}</span><span class="badge b-${esc(st)}">${esc(u.status)}</span></div></div>
+        <div class="perm-list">Akses: ${esc(permNames(userPerms(u)))}${u.aksesKhusus ? ' · <i>diatur khusus</i>' : ''}</div>
+        ${acts ? `<div class="urow-acts">${acts}</div>` : ''}
+      </div>`;
+    }).join('') || '<div class="empty-row">Belum ada pengguna.</div>';
+  }catch(err){ tb.innerHTML = '<div class="empty-row">' + esc(err.message) + '</div>'; }
 }
 
+function renderPermBoxes(list){
+  $('#u-perms').innerHTML = PERM_LIST.map(([k, label]) =>
+    `<label><input type="checkbox" value="${k}"${list.includes(k) ? ' checked' : ''}> ${esc(label)}</label>`).join('');
+}
+function selectedPerms(){ return [...document.querySelectorAll('#u-perms input:checked')].map(i => i.value); }
 function resetUserForm(){
   $('#f-user').reset(); $('#u-username').readOnly = false;
   $('#u-title').textContent = 'Tambah pengguna'; $('#u-pass-label').textContent = 'Password';
+  renderPermBoxes(ROLE_PERMS[$('#u-role').value] || []);
 }
+renderPermBoxes(ROLE_PERMS.petugas);
+$('#u-role').addEventListener('change', e => renderPermBoxes(ROLE_PERMS[e.target.value] || []));
 $('#btn-u-reset').addEventListener('click', resetUserForm);
 $('#btn-reload-users').addEventListener('click', loadUsers);
 
@@ -1199,10 +1256,10 @@ function buildUserPrint(){
       <div>Dicetak ${esc(new Date().toLocaleString('id-ID'))}<br>oleh ${esc(S.user ? S.user.nama : '')}</div></div>
     <p class="up-sum">Total ${list.length} pengguna · Aktif ${count('aktif')} · Menunggu ${count('menunggu')} · Nonaktif ${count('nonaktif')}
       &nbsp;|&nbsp; Admin ${byRole('admin')} · Supervisor ${byRole('supervisor')} · Petugas ${byRole('petugas')}</p>
-    <table class="up-table"><thead><tr><th class="c">No</th><th>Nama</th><th>Username</th><th>Role</th><th>Status</th><th>Terdaftar</th></tr></thead>
+    <table class="up-table"><thead><tr><th class="c">No</th><th>Nama</th><th>Username</th><th>Role</th><th>Hak akses</th><th>Status</th><th>Terdaftar</th></tr></thead>
     <tbody>${list.map((u,i) => `<tr><td class="c">${i+1}</td><td>${esc(u.nama)}</td><td>${esc(u.username)}</td>
-      <td>${esc(ROLE_LABEL[u.role] || u.role)}</td><td>${esc(u.status)}</td><td>${esc(u.dibuat || '')}</td></tr>`).join('')
-      || '<tr><td colspan="6">Belum ada pengguna.</td></tr>'}</tbody></table>`;
+      <td>${esc(ROLE_LABEL[u.role] || u.role)}</td><td>${esc(permNames(userPerms(u)))}</td><td>${esc(u.status)}</td><td>${esc(u.dibuat || '')}</td></tr>`).join('')
+      || '<tr><td colspan="7">Belum ada pengguna.</td></tr>'}</tbody></table>`;
 }
 $('#btn-print-users').addEventListener('click', async e => {
   if (!usersCache.length){ await withBusy(e.currentTarget, loadUsers); }
@@ -1217,6 +1274,7 @@ $('#u-tbody').addEventListener('click', async e => {
   if (b.dataset.act === 'edit'){
     $('#u-username').value = u.username; $('#u-username').readOnly = true;
     $('#u-nama').value = u.nama; $('#u-role').value = u.role; $('#u-status').value = u.status || 'Aktif';
+    renderPermBoxes(userPerms(u));
     $('#u-password').value = ''; $('#u-title').textContent = 'Ubah pengguna';
     $('#u-pass-label').textContent = 'Password baru (kosongkan jika tidak diganti)';
     window.scrollTo({ top:0, behavior:'smooth' });
@@ -1225,7 +1283,13 @@ $('#u-tbody').addEventListener('click', async e => {
   await withBusy(b, async () => {
     try{
       let msg;
-      if (b.dataset.act === 'approve') msg = await api('apiSaveUser', S.token, { ...u, status:'Aktif' });
+      if (b.dataset.act === 'approve'){
+        try{ msg = await api('apiApproveUser', S.token, u.username); }
+        catch(err){
+          if (!/tidak dikenal/i.test(err.message)) throw err;
+          msg = await api('apiSaveUser', S.token, { username:u.username, nama:u.nama, role:u.role, status:'Aktif' });   // Code.gs lama
+        }
+      }
       if (b.dataset.act === 'del'){ if (!confirm('Hapus pengguna ' + u.username + '?')) return; msg = await api('apiDeleteUser', S.token, u.username); }
       toast(msg, 'ok'); loadUsers();
     }catch(err){ toast(err.message, 'bad'); }
@@ -1238,7 +1302,8 @@ $('#f-user').addEventListener('submit', e => {
     try{
       const msg = await api('apiSaveUser', S.token, {
         username:$('#u-username').value.trim(), nama:$('#u-nama').value.trim(),
-        role:$('#u-role').value, status:$('#u-status').value, password:$('#u-password').value
+        role:$('#u-role').value, status:$('#u-status').value, password:$('#u-password').value,
+        akses:selectedPerms()
       });
       toast(msg, 'ok'); resetUserForm(); loadUsers();
     }catch(err){ toast(err.message, 'bad'); }
