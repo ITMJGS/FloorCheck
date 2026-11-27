@@ -229,11 +229,14 @@ function decodeFile(file){
 }
 
 function onQr(text){
-  if (text.indexOf('FBCF:') !== 0) return msg($('scanMsg'), 'Ini bukan QR FB Cek Floor.', 'err');
-  F.token = text; F.name = text.slice(5); msg($('scanMsg'), 'QR terbaca: ' + F.name, 'good');
-  if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(p){ F.lat = p.coords.latitude; F.lng = p.coords.longitude; }, function(){}, { timeout: 8000 });
-  F.items = S.checklist.map(function(){ return null; });
-  renderForm();
+  text = String(text || '').trim();
+  msg($('scanMsg'), 'Memeriksa QR…', 'info');
+  call('checkLocation', text).then(function(r){
+    F.token = text; F.name = r.nama; msg($('scanMsg'), 'QR terbaca: ' + r.nama, 'good');
+    if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(p){ F.lat = p.coords.latitude; F.lng = p.coords.longitude; }, function(){}, { timeout: 8000 });
+    F.items = S.checklist.map(function(){ return null; });
+    renderForm();
+  }).catch(function(e){ msg($('scanMsg'), e.message + ' Isi QR: "' + text.slice(0, 60) + '"', 'err'); });
 }
 
 function renderForm(){
@@ -352,10 +355,10 @@ function renderLoc(){
 }
 function showQr(l){
   qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
-  var q = qrcode(0, 'M'); q.addData('FBCF:' + l.nama); q.make();
+  var q = qrcode(0, 'M'); q.addData(l.nama); q.make();
   var m = document.createElement('div'); m.className = 'modal';
   m.innerHTML = '<div class="card"><h2>' + esc(l.nama) + '</h2><p style="margin:0;color:var(--mute)">' + esc(l.area) + ' · ' + esc(l.id) + '</p>' +
-    '<div class="qrbox">' + q.createSvgTag(6, 2) + '</div>' +
+    '<div class="qrbox">' + q.createSvgTag(6, 2) + '</div><div style="font-size:22px;font-weight:600;margin:6px 0 12px">' + esc(l.nama) + '</div>' +
     '<div class="row noprint"><button class="btn" id="pr">Cetak</button><button class="btn sec" id="cl">Tutup</button></div></div>';
   document.body.appendChild(m);
   m.querySelector('#cl').onclick = function(){ m.remove(); };
