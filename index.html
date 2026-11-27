@@ -422,16 +422,24 @@ function buildPdf(d){
     var okN = g.items.filter(function(i){ return i.x.count > 0; }).length;
     need(16); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(30); txt(g.group + '  (' + okN + '/' + g.items.length + ')', M, y); y += 5;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
-    for (var i = 0; i < g.items.length; i += 2){
+    var cols = 3, cw = CW / cols;
+    function fit(str, maxW){
+      str = pdfClean(str); if (doc.getTextWidth(str) <= maxW) return str;
+      while (str.length > 1 && doc.getTextWidth(str + '..') > maxW) str = str.slice(0, -1);
+      return str + '..';
+    }
+    for (var i = 0; i < g.items.length; i += cols){
       need(6);
-      [0, 1].forEach(function(c){
-        var it = g.items[i + c]; if (!it) return;
-        var x = M + c * (CW / 2), l = it.x;
+      for (var c = 0; c < cols; c++){
+        var it = g.items[i + c]; if (!it) continue;
+        var x = M + c * cw, l = it.x, right = x + cw - 3;
         if (l.count){ doc.setFillColor(31, 138, 91); doc.circle(x + 1.5, y - 1.2, 1.2, 'F'); } else { doc.setDrawColor(160); doc.circle(x + 1.5, y - 1.2, 1.2, 'S'); }
-        doc.setTextColor(30); txt(it.label, x + 5, y);
+        var st = l.count ? fit(l.waktu + ' ' + String(l.petugas || '').split(' ')[0], 31) : 'belum';
         doc.setTextColor(l.count ? 31 : 140, l.count ? 138 : 140, l.count ? 91 : 140);
-        txt(l.count ? l.waktu + ' ' + l.petugas : 'belum', x + CW / 2 - 4, y, { align: 'right' });
-      });
+        txt(st, right, y, { align: 'right' });
+        var stW = doc.getTextWidth(pdfClean(st));
+        doc.setTextColor(30); txt(fit(it.label, cw - 5 - stW - 4), x + 5, y);
+      }
       y += 5.5;
     }
     y += 2;
