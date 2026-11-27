@@ -75,6 +75,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
 var S = { token: null, me: null, tab: 'scan', admin: null, dash: null, days: 7, stream: null, raf: 0 };
 
@@ -367,6 +368,111 @@ function viewDash(){
   call('getDashboard', S.days).then(function(d){ S.dash = d; renderDash(); })
     .catch(function(e){ $('main').innerHTML = '<div class="card"><div class="msg err">' + esc(e.message) + '</div></div>'; });
 }
+/* ---------- Export PDF (dibuat di browser dengan jsPDF) ---------- */
+function pdfClean(s){
+  return String(s == null ? '' : s)
+    .replace(/[–—−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/[•●]/g, '-').replace(/…/g, '...').replace(/\r/g, '')
+    .replace(/[^\x20-\xFF\n]/g, '?');
+}
+function pad2(n){ return ('0' + n).slice(-2); }
+function fmtTgl(dt){ return dt.getDate() + ' ' + ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][dt.getMonth()] + ' ' + dt.getFullYear(); }
+
+function buildPdf(d){
+  var J = window.jspdf && window.jspdf.jsPDF;
+  if (!J) throw new Error('Pustaka PDF belum termuat. Periksa koneksi internet lalu muat ulang halaman.');
+  var doc = new J({ unit: 'mm', format: 'a4' }), W = 210, H = 297, M = 14, CW = W - 2 * M, y = 0;
+  function need(h){ if (y + h > H - 16){ doc.addPage(); y = M; } }
+  function txt(s, x, yy, o){ doc.text(pdfClean(s), x, yy, o); }
+  function heading(s){ need(14); y += 4; doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(23, 48, 79); txt(s, M, y); y += 2; doc.setDrawColor(210); doc.line(M, y, W - M, y); y += 5; }
+
+  var now = new Date(), start = new Date(); start.setDate(start.getDate() - (d.days - 1));
+  doc.setFillColor(23, 48, 79); doc.rect(0, 0, W, 24, 'F');
+  doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); txt('FB Cek Floor - Laporan Patroli', M, 11);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+  txt('Periode: ' + fmtTgl(start) + ' - ' + fmtTgl(now) + ' (' + d.days + ' hari)', M, 18);
+  y = 31; doc.setTextColor(90); doc.setFontSize(8.5);
+  txt('Dibuat ' + fmtTgl(now) + ' ' + pad2(now.getHours()) + '.' + pad2(now.getMinutes()) + (S.me ? ' oleh ' + S.me.nama : ''), M, y); y += 6;
+
+  var k = d.kpi, boxes = [['Laporan hari ini', k.today], ['Titik dicek hari ini', k.locChecked + '/' + k.locTotal], ['Belum dicek hari ini', k.locTotal - k.locChecked], ['Laporan ' + d.days + ' hari', k.period]];
+  var bw = (CW - 3 * 4) / 4;
+  boxes.forEach(function(b, i){
+    var x = M + i * (bw + 4);
+    doc.setFillColor(243, 244, 246); doc.roundedRect(x, y, bw, 17, 2, 2, 'F');
+    doc.setTextColor(100); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); txt(b[0], x + 3, y + 5.5);
+    doc.setTextColor(20); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); txt(b[1], x + 3, y + 13.5);
+  });
+  y += 21;
+
+  heading('Jumlah laporan per hari');
+  var n = d.trend.length, max = Math.max.apply(null, d.trend.map(function(t){ return t.count; }).concat([1])), ch = 26, slot = CW / n, step = Math.ceil(n / 14);
+  need(ch + 12);
+  d.trend.forEach(function(t, i){
+    var bh = t.count / max * ch, x = M + i * slot + slot * 0.2;
+    doc.setFillColor(31, 138, 91); if (bh > 0) doc.rect(x, y + ch - bh, slot * 0.6, bh, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
+    if (t.count > 0){ doc.setTextColor(60); txt(t.count, x + slot * 0.3, y + ch - bh - 1, { align: 'center' }); }
+    if (i % step === 0){ doc.setTextColor(110); txt(t.tanggal, x + slot * 0.3, y + ch + 4, { align: 'center' }); }
+  });
+  doc.setDrawColor(200); doc.line(M, y + ch, W - M, y + ch); y += ch + 8;
+
+  heading('Status titik hari ini (' + k.locChecked + '/' + k.locTotal + ' sudah dicek)');
+  if (!d.locStatus.length){ doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120); txt('Belum ada lokasi aktif.', M, y); y += 6; }
+  groupBy(d.locStatus).forEach(function(g){
+    var okN = g.items.filter(function(i){ return i.x.count > 0; }).length;
+    need(16); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(30); txt(g.group + '  (' + okN + '/' + g.items.length + ')', M, y); y += 5;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+    for (var i = 0; i < g.items.length; i += 2){
+      need(6);
+      [0, 1].forEach(function(c){
+        var it = g.items[i + c]; if (!it) return;
+        var x = M + c * (CW / 2), l = it.x;
+        if (l.count){ doc.setFillColor(31, 138, 91); doc.circle(x + 1.5, y - 1.2, 1.2, 'F'); } else { doc.setDrawColor(160); doc.circle(x + 1.5, y - 1.2, 1.2, 'S'); }
+        doc.setTextColor(30); txt(it.label, x + 5, y);
+        doc.setTextColor(l.count ? 31 : 140, l.count ? 138 : 140, l.count ? 91 : 140);
+        txt(l.count ? l.waktu + ' ' + l.petugas : 'belum', x + CW / 2 - 4, y, { align: 'right' });
+      });
+      y += 5.5;
+    }
+    y += 2;
+  });
+
+  heading('Laporan terbaru (' + d.recent.length + ')');
+  if (!d.recent.length){ doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120); txt('Belum ada laporan.', M, y); y += 6; }
+  d.recent.forEach(function(r){
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+    var lines = r.catatan ? doc.splitTextToSize(pdfClean(r.catatan), CW - 20) : [], rowH = Math.max(17, 11 + lines.length * 4 + 3);
+    need(rowH);
+    if (r.thumb){ try { doc.addImage(r.thumb, 'JPEG', M, y - 3, 14, 14); } catch (e) { doc.setFillColor(235); doc.rect(M, y - 3, 14, 14, 'F'); } }
+    else { doc.setFillColor(235); doc.rect(M, y - 3, 14, 14, 'F'); }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(25); txt(r.lokasi, M + 18, y + 1);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110); txt(r.waktu + '  -  ' + r.petugas, M + 18, y + 5.5);
+    if (lines.length){ doc.setFontSize(8.5); doc.setTextColor(50); doc.text(lines, M + 18, y + 10); }
+    y += rowH; doc.setDrawColor(230); doc.line(M, y - 3, W - M, y - 3);
+  });
+
+  var pages = doc.getNumberOfPages();
+  for (var p = 1; p <= pages; p++){
+    doc.setPage(p); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150);
+    txt('FB Cek Floor  -  hal. ' + p + ' / ' + pages, W / 2, H - 8, { align: 'center' });
+  }
+  return doc;
+}
+
+function exportPdf(){
+  var m = $('pdfMsg'), b = $('pdf');
+  if (!S.dash) return msg(m, 'Data dashboard belum dimuat.', 'err');
+  b.disabled = true; b.textContent = 'Membuat PDF…'; msg(m, '');
+  setTimeout(function(){
+    try {
+      var t = new Date(), doc = buildPdf(S.dash);
+      doc.save('Laporan-Patroli-' + t.getFullYear() + pad2(t.getMonth() + 1) + pad2(t.getDate()) + '.pdf');
+      msg(m, 'PDF dibuat. Cek folder Unduhan.', 'good');
+    } catch (e) { msg(m, 'Gagal membuat PDF: ' + e.message, 'err'); }
+    b.disabled = false; b.textContent = 'Export PDF';
+  }, 30);
+}
+
 function dashTiles(list){
   if (!list.length) return '<p style="color:var(--mute)">Belum ada lokasi aktif.</p>';
   return groupBy(list).map(function(g){
@@ -385,7 +491,7 @@ function renderDash(){
   $('main').innerHTML =
     '<div class="row noprint" style="margin-bottom:10px"><select id="days">' +
     [7, 14, 30].map(function(n){ return '<option value="' + n + '"' + (n === d.days ? ' selected' : '') + '>' + n + ' hari terakhir</option>'; }).join('') +
-    '</select><button class="btn sec" id="rf">Refresh</button></div>' +
+    '</select><button class="btn sec" id="rf">Refresh</button><button class="btn" id="pdf">Export PDF</button></div><div id="pdfMsg"></div>' +
     '<div class="kpis">' +
       '<div class="kpi"><span>Laporan hari ini</span><b>' + k.today + '</b></div>' +
       '<div class="kpi"><span>Lokasi sudah dicek hari ini</span><b>' + k.locChecked + '/' + k.locTotal + '</b></div>' +
@@ -400,6 +506,7 @@ function renderDash(){
     '</table></div>';
   $('days').onchange = function(){ S.days = +this.value; viewDash(); };
   $('rf').onclick = viewDash;
+  $('pdf').onclick = exportPdf;
   $('main').onclick = function(e){ var id = e.target.getAttribute && e.target.getAttribute('data-p'); if (id) openPhoto(id); };
 }
 
