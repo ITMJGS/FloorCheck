@@ -17,6 +17,18 @@
   .toasts{position:fixed;top:10px;left:10px;right:10px;max-width:420px;margin-left:auto;z-index:60}
   .toast{background:#17304f;color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;box-shadow:0 6px 20px rgba(0,0,0,.3);display:flex;gap:10px;align-items:center;cursor:pointer}
   .toast small{opacity:.8}
+  .track{position:relative;height:50px;border-bottom:2px dashed #cbd0d6;margin-top:6px}
+  .track .wkr{position:absolute;bottom:2px;width:34px;height:46px;transition:left 1.2s linear}
+  .track .flag{position:absolute;right:0;bottom:4px;font-size:18px}
+  .lane{margin-bottom:14px} .lmeta{display:flex;justify-content:space-between;gap:8px;font-size:14px;flex-wrap:wrap} .lmeta span{color:var(--mute);font-size:13px}
+  .wk .leg,.wk .arm,.wk .bob{animation-iteration-count:infinite;animation-timing-function:ease-in-out;animation-duration:.6s}
+  .wk .l1,.wk .a2{animation-name:swingA} .wk .l2,.wk .a1{animation-name:swingB}
+  .wk .bob{animation-name:bobY;animation-duration:.3s}
+  @keyframes swingA{0%,100%{transform:rotate(28deg)}50%{transform:rotate(-28deg)}}
+  @keyframes swingB{0%,100%{transform:rotate(-28deg)}50%{transform:rotate(28deg)}}
+  @keyframes bobY{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+  .idle .wk *{animation-play-state:paused!important}
+  @media (prefers-reduced-motion:reduce){.wk *{animation:none!important}}
   nav{display:flex;gap:6px;padding:12px 0 2px;overflow-x:auto}
   nav button{border:0;background:none;padding:9px 16px;border-radius:99px;font:inherit;color:rgba(255,255,255,.85);white-space:nowrap;cursor:pointer}
   nav button.on{background:#fff;color:#17304f;font-weight:600}
@@ -120,7 +132,7 @@ function msg(el, text, type){ el.innerHTML = text ? '<div class="msg ' + (type |
 /* ---------- Login & Boot ---------- */
 function showLogin(note){
   stopCam(); S.token = null; S.me = null; saveTok(null);
-  stopWatch(); $('nav').classList.add('hide'); $('out').classList.add('hide'); $('bell').classList.add('hide'); $('who').textContent = '';
+  stopWatch(); stopLive(); stopPing(); $('nav').classList.add('hide'); $('out').classList.add('hide'); $('bell').classList.add('hide'); $('who').textContent = '';
   $('main').innerHTML = '<div class="card" style="max-width:380px;margin:30px auto"><h2>Masuk</h2>' +
     '<label>ID user</label><input id="lu" autocapitalize="none" autocomplete="username">' +
     '<label>PIN (6 digit)</label><input id="lp" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">' +
@@ -171,6 +183,7 @@ function start(r){
   if (r.user.role === 'admin'){ call('adminList').then(function(a){ S.admin = a; badge(); }).catch(function(){}); startWatch(); } else stopWatch();
 }
 /* ---------- Notifikasi admin: bunyi + banner + notifikasi sistem ---------- */
+var DL = { timer: 0 }, PG = { timer: 0 };   // timer kartu 'Sedang patroli' dan sinyal patroli
 var W = { timer: 0, since: null, busy: false, ctx: null };
 function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsSet(k, v){ try { localStorage.setItem(k, v); } catch (e) {} }
@@ -263,7 +276,7 @@ function badge(){
 })();
 
 function go(t){
-  stopCam(); S.tab = t; $('main').onclick = null;
+  stopCam(); stopLive(); S.tab = t; $('main').onclick = null;
   Array.prototype.forEach.call($('nav').children, function(b){ b.classList.toggle('on', b.getAttribute('data-t') === t); });
   ({ scan: viewScan, dash: viewDash, loc: viewLoc, usr: viewUsr })[t]();
 }
@@ -328,7 +341,8 @@ function refreshPatrol(){
     '<div class="infogrid"><div class="info"><span>Petugas</span><b>' + esc(S.me.nama) + '</b></div><div class="info"><span>Tanggal</span><b>' + todayStr() + '</b></div>' +
     '<div class="info"><span>Mulai</span><b>' + (P.started ? hhmm(P.started) : '–') + '</b></div></div>' +
     '<div class="prog"><b>' + scanned + ' / ' + total + '</b><span>titik sudah di-scan</span></div>' +
-    '<div class="pbar"><i style="width:' + (total ? Math.round(scanned / total * 100) : 0) + '%"></i></div>';
+    '<div class="track' + (scanned === 0 || scanned >= total ? ' idle' : '') + '"><div class="wkr" style="left:' + leftFor(scanned, total) + '">' + walkerSvg() + '</div><span class="flag">🏁</span></div>' +
+    '<div class="pbar" style="margin-top:8px"><i style="width:' + (total ? Math.round(scanned / total * 100) : 0) + '%"></i></div>';
   $('bCam').textContent = S.stream ? 'Tutup Kamera' : 'Buka Kamera';
   $('pList').innerHTML = '<h2>Daftar titik cek</h2>' + (total ? groupBy(P.points).map(function(g){
     var okN = g.items.filter(function(i){ return P.done[i.x.key] || P.sent[i.x.key]; }).length;
@@ -385,7 +399,7 @@ function onScan(text){
   if (navigator.vibrate) navigator.vibrate(80);
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(p){ it.lat = p.coords.latitude; it.lng = p.coords.longitude; }, function(){}, { timeout: 8000, maximumAge: 60000 });
   msg(m, '✔ ' + pt.nama + ' — ketuk kotak hijau jika ingin menambah foto atau catatan (opsional)', 'good');
-  refreshPatrol();
+  refreshPatrol(); pingNow(); startPing();
 }
 
 function openPoint(k){
@@ -416,6 +430,7 @@ function openPoint(k){
 
 function cancelPatrol(){
   if (!confirm('Batalkan patroli ini? Semua scan, foto, dan catatan yang belum terkirim akan dihapus.')) return;
+  stopPing(); call('patrolEnd').catch(function(){});
   var u = P.user; P = newP(u); viewScan();
 }
 
@@ -427,7 +442,7 @@ function sendAll(){
     if (i >= keys.length){
       P.sending = false;
       var n = Object.keys(P.sent).length;
-      call('finishPatrol', { count: n }).catch(function(){});
+      call('finishPatrol', { count: n }).catch(function(){}); stopPing();
       $('main').innerHTML = '<div class="card"><h2>Patroli terkirim ✔</h2><p><b>' + n + '</b> titik berhasil dikirim.</p><button class="btn block" id="again">Patroli baru</button></div>';
       return $('again').onclick = function(){ var u = P.user; P = newP(u); viewScan(); };
     }
@@ -575,6 +590,57 @@ function exportPdf(){
   }, 30);
 }
 
+/* ---------- Karakter petugas berjalan (orisinal) + kartu "Sedang patroli" ---------- */
+function walkerSvg(){
+  var o = function(x, y){ return 'style="transform-origin:' + x + 'px ' + y + 'px"'; };
+  return '<svg class="wk" viewBox="0 0 34 46" width="34" height="46" aria-hidden="true">' +
+    '<ellipse cx="17" cy="44.4" rx="9" ry="1.8" fill="rgba(0,0,0,.15)"/><g class="bob">' +
+    '<g class="arm a1" ' + o(17, 17) + '><rect x="14.6" y="16" width="4.6" height="12" rx="2.3" fill="#243f66"/><circle cx="17" cy="28.6" r="2.4" fill="#f0c49c"/></g>' +
+    '<g class="leg l1" ' + o(17, 28) + '><rect x="14.2" y="27" width="5.2" height="13" rx="2.4" fill="#16263d"/><rect x="13.2" y="38.6" width="7.6" height="3.8" rx="1.9" fill="#0d0d12"/></g>' +
+    '<rect x="10.4" y="13.5" width="13.2" height="16" rx="4.4" fill="#2f4b73"/><rect x="10.4" y="25.2" width="13.2" height="2.4" fill="#16263d"/><circle cx="20.2" cy="19" r="1.7" fill="#e3b341"/>' +
+    '<g class="leg l2" ' + o(17, 28) + '><rect x="14.2" y="27" width="5.2" height="13" rx="2.4" fill="#1f3350"/><rect x="13.2" y="38.6" width="7.6" height="3.8" rx="1.9" fill="#111118"/></g>' +
+    '<circle cx="17" cy="9" r="6.2" fill="#f0c49c"/><path d="M10.4 8.4 Q17 -0.8 23.6 8.4 Z" fill="#17304f"/><rect x="9.6" y="7.4" width="16.4" height="2.2" rx="1.1" fill="#17304f"/><circle cx="17" cy="3.4" r="1.1" fill="#e3b341"/>' +
+    '<circle cx="20.4" cy="10" r="0.95" fill="#222"/><path d="M19 12.6 q1.6 1 3 0" stroke="#a5654a" stroke-width=".8" fill="none" stroke-linecap="round"/>' +
+    '<g class="arm a2" ' + o(17, 17) + '><rect x="14.6" y="16" width="4.6" height="12" rx="2.3" fill="#2f4b73"/><circle cx="17" cy="28.6" r="2.4" fill="#f0c49c"/><rect x="16" y="26.6" width="9" height="4" rx="1.6" fill="#555a63"/><rect x="24" y="26.2" width="2.6" height="4.8" rx="1" fill="#e8d36a"/></g>' +
+    '</g></svg>';
+}
+function leftFor(n, total){ var p = total ? Math.min(1, n / total) : 0; return 'calc((100% - 34px) * ' + p + ')'; }
+function laneHtml(p){
+  return '<div class="lane" data-u="' + esc(p.username) + '"><div class="lmeta"><b>' + esc(p.nama) + '</b><span>' + p.n + ' / ' + p.total + ' titik · mulai ' + esc(p.jam) + '</span></div>' +
+    '<div class="track"><div class="wkr" style="left:' + leftFor(p.n, p.total) + '">' + walkerSvg() + '</div><span class="flag">🏁</span></div></div>';
+}
+function stopLive(){ if (DL.timer) clearInterval(DL.timer); DL.timer = 0; }
+function refreshLive(){
+  if (!$('liveBox')) return stopLive();
+  call('getActivePatrols').then(function(list){
+    var box = $('liveBox'); if (!box) return;
+    var keep = {};
+    list.forEach(function(p){
+      keep[p.username] = 1;
+      var ln = box.querySelector('.lane[data-u="' + p.username + '"]');
+      if (!ln) box.insertAdjacentHTML('beforeend', laneHtml(p));
+      else { ln.querySelector('.lmeta span').textContent = p.n + ' / ' + p.total + ' titik · mulai ' + p.jam; ln.querySelector('.wkr').style.left = leftFor(p.n, p.total); }
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('.lane'), function(ln){ if (!keep[ln.getAttribute('data-u')]) ln.remove(); });
+    var empty = box.querySelector('.empty');
+    if (list.length){ if (empty) empty.remove(); }
+    else if (empty) empty.textContent = 'Tidak ada petugas yang sedang patroli.';
+    else box.insertAdjacentHTML('beforeend', '<p class="empty" style="color:var(--mute);margin:0">Tidak ada petugas yang sedang patroli.</p>');
+    $('liveN').textContent = list.length;
+    $('liveN').className = 'pill ' + (list.length ? 'ok' : 'none');
+  }).catch(function(){});
+}
+function startLive(){ stopLive(); refreshLive(); DL.timer = setInterval(refreshLive, 15000); }
+
+/* sinyal "sedang patroli" dari HP petugas */
+function pingNow(){
+  if (!S.token || !S.me) return;
+  var n = Object.keys(P.done).length + Object.keys(P.sent).length; if (!n) return;
+  call('patrolPing', { n: n, total: P.points.length }).catch(function(){});
+}
+function startPing(){ if (!PG.timer) PG.timer = setInterval(pingNow, 45000); }
+function stopPing(){ if (PG.timer) clearInterval(PG.timer); PG.timer = 0; }
+
 function dashTiles(list){
   if (!list.length) return '<p style="color:var(--mute)">Belum ada lokasi aktif.</p>';
   return groupBy(list).map(function(g){
@@ -599,6 +665,7 @@ function renderDash(){
       '<div class="kpi"><span>Lokasi sudah dicek hari ini</span><b>' + k.locChecked + '/' + k.locTotal + '</b></div>' +
       '<div class="kpi"><span>Belum dicek hari ini</span><b>' + (k.locTotal - k.locChecked) + '</b></div>' +
       '<div class="kpi"><span>Laporan ' + d.days + ' hari</span><b>' + k.period + '</b></div></div>' +
+    '<div class="card"><h2>Sedang patroli <span class="pill none" id="liveN">0</span></h2><div id="liveBox"><p class="empty" style="color:var(--mute);margin:0">Memuat…</p></div></div>' +
     '<div class="card"><h2>Status titik hari ini</h2>' + dashTiles(d.locStatus) + '</div>' +
     '<div class="card"><h2>Laporan terbaru</h2><table>' +
       (d.recent.length ? d.recent.map(function(r){ return '<tr><td style="width:64px">' + (r.thumb ? '<img class="thumb" style="cursor:pointer" data-p="' + esc(r.foto_id) + '" src="' + esc(r.thumb) + '">' : '') + '</td><td>' + esc(r.lokasi) + '<br><small style="color:var(--mute)">' + esc(r.waktu) + ' · ' + esc(r.petugas) + '</small>' + (r.catatan ? '<br><small>' + esc(r.catatan) + '</small>' : '') + '</td></tr>'; }).join('') : '<tr><td style="color:var(--mute)">Belum ada laporan.</td></tr>') +
@@ -606,6 +673,7 @@ function renderDash(){
   $('days').onchange = function(){ S.days = +this.value; viewDash(); };
   $('rf').onclick = viewDash;
   $('pdf').onclick = exportPdf;
+  startLive();
   $('main').onclick = function(e){ var id = e.target.getAttribute && e.target.getAttribute('data-p'); if (id) openPhoto(id); };
 }
 
