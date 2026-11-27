@@ -447,16 +447,42 @@ function buildPdf(d){
 
   heading('Laporan terbaru (' + d.recent.length + ')');
   if (!d.recent.length){ doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120); txt('Belum ada laporan.', M, y); y += 6; }
-  d.recent.forEach(function(r){
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
-    var lines = r.catatan ? doc.splitTextToSize(pdfClean(r.catatan), CW - 20) : [], rowH = Math.max(17, 11 + lines.length * 4 + 3);
-    need(rowH);
-    if (r.thumb){ try { doc.addImage(r.thumb, 'JPEG', M, y - 3, 14, 14); } catch (e) { doc.setFillColor(235); doc.rect(M, y - 3, 14, 14, 'F'); } }
-    else { doc.setFillColor(235); doc.rect(M, y - 3, 14, 14, 'F'); }
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(25); txt(r.lokasi, M + 18, y + 1);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110); txt(r.waktu + '  -  ' + r.petugas, M + 18, y + 5.5);
-    if (lines.length){ doc.setFontSize(8.5); doc.setTextColor(50); doc.text(lines, M + 18, y + 10); }
-    y += rowH; doc.setDrawColor(230); doc.line(M, y - 3, W - M, y - 3);
+  var rc = 3, rw = CW / rc, tw = rw - 19 - 3; // lebar kolom, lebar teks di samping foto
+  function rlines(s, size, bold, maxLines){
+    doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size);
+    var L = doc.splitTextToSize(pdfClean(s), tw);
+    if (maxLines && L.length > maxLines){ L = L.slice(0, maxLines); var t = L[maxLines - 1]; while (t.length > 1 && doc.getTextWidth(t + '..') > tw) t = t.slice(0, -1); L[maxLines - 1] = t + '..'; }
+    return L;
+  }
+  groupBy(d.recent.map(function(r){ return { nama: r.lokasi, r: r }; })).forEach(function(g){
+    need(34); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(30);
+    txt(g.group + '  (' + g.items.length + ' laporan)', M, y); y += 4;
+    for (var i = 0; i < g.items.length; i += rc){
+      var cards = [], rowH = 18;
+      for (var c = 0; c < rc; c++){
+        var it = g.items[i + c]; if (!it) continue;
+        var r = it.x.r, card = { r: r, label: rlines(it.label, 9, true, 2), meta: rlines(r.waktu + ' - ' + r.petugas, 7.5, false, 2), note: r.catatan ? rlines(r.catatan, 8, false, 4) : [] };
+        card.h = card.label.length * 4 + card.meta.length * 3.4 + card.note.length * 3.5 + 4;
+        rowH = Math.max(rowH, card.h + 2); cards.push(card);
+      }
+      var pgBefore = doc.getNumberOfPages();
+      need(rowH + 2 + (i > 0 ? 6 : 0));
+      if (i > 0 && doc.getNumberOfPages() > pgBefore){
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(30); txt(g.group + '  (lanjutan)', M, y); y += 4;
+      }
+      cards.forEach(function(cd, c){
+        var x = M + c * rw, r = cd.r, ty = y + 3;
+        if (r.thumb){ try { doc.addImage(r.thumb, 'JPEG', x, y, 16, 16); } catch (e) { doc.setFillColor(235); doc.rect(x, y, 16, 16, 'F'); } }
+        else { doc.setFillColor(235); doc.rect(x, y, 16, 16, 'F'); }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(25); doc.text(cd.label, x + 19, ty);
+        ty += cd.label.length * 4;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(110); doc.text(cd.meta, x + 19, ty);
+        ty += cd.meta.length * 3.4 + 0.6;
+        if (cd.note.length){ doc.setFontSize(8); doc.setTextColor(50); doc.text(cd.note, x + 19, ty); }
+      });
+      y += rowH; doc.setDrawColor(235); doc.line(M, y - 1.5, W - M, y - 1.5); y += 2.5;
+    }
+    y += 2;
   });
 
   var pages = doc.getNumberOfPages();
