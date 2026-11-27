@@ -303,7 +303,7 @@ function renderDash(){
       d.trend.map(function(t){ return '<div title="' + t.count + ' cek, skor ' + (t.skor == null ? '-' : t.skor + '%') + '"><i style="height:' + Math.round(t.count / max * 80) + '%"></i>' + esc(t.tanggal) + '</div>'; }).join('') +
     '</div></div>' +
     '<div class="card"><h2>Status lokasi hari ini</h2><table><tr><th>Lokasi</th><th>Cek</th><th>Skor terakhir</th><th>Oleh</th></tr>' +
-      d.locStatus.map(function(l){ return '<tr><td>' + esc(l.nama) + '<br><small style="color:var(--mute)">' + esc(l.area) + '</small></td><td>' + l.count + 'x</td><td>' + scorePill(l.skor) + '</td><td>' + esc(l.petugas || '–') + (l.waktu ? '<br><small>' + l.waktu + '</small>' : '') + '</td></tr>'; }).join('') +
+      d.locStatus.map(function(l){ return '<tr><td>' + esc(l.nama) + '</td><td>' + l.count + 'x</td><td>' + scorePill(l.skor) + '</td><td>' + esc(l.petugas || '–') + (l.waktu ? '<br><small>' + l.waktu + '</small>' : '') + '</td></tr>'; }).join('') +
     '</table></div>' +
     '<div class="card"><h2>Item paling sering gagal</h2>' +
       (d.topFail.length ? '<table>' + d.topFail.map(function(f){ return '<tr><td>' + esc(f.item) + '</td><td><span class="pill bad">' + f.n + 'x</span></td></tr>'; }).join('') + '</table>' : '<p style="color:var(--mute)">Belum ada data.</p>') + '</div>' +
@@ -331,25 +331,27 @@ function viewLoc(){
   loadAdmin().then(renderLoc).catch(function(e){ $('main').innerHTML = '<div class="card"><div class="msg err">' + esc(e.message) + '</div></div>'; });
 }
 function renderLoc(){
+  var locs = S.admin.locations;
   $('main').innerHTML =
-    '<div class="card"><h2>Tambah lokasi</h2><div class="row"><input id="ln" placeholder="Nama lokasi (mis. Main Dining)"><input id="la" placeholder="Area (mis. Lantai 1)"></div>' +
-    '<button class="btn" style="margin-top:10px" id="addL">Tambah</button><div id="lm"></div></div>' +
-    '<div class="card"><h2>Daftar lokasi</h2><table><tr><th>ID</th><th>Lokasi</th><th>Status</th><th></th></tr>' +
-    S.admin.locations.map(function(l){
-      return '<tr><td>' + esc(l.id) + '</td><td>' + esc(l.nama) + '<br><small style="color:var(--mute)">' + esc(l.area) + '</small></td>' +
+    '<div class="card"><h2>Tambah lokasi</h2><input id="ln" placeholder="Nama lokasi, mis. Lantai 30 Gatsu Barat" maxlength="60">' +
+    '<button class="btn" style="margin-top:10px" id="addL">Tambah</button><div id="lm"></div>' +
+    '<p style="color:var(--mute);font-size:13px;margin:8px 0 0">QR berisi nama lokasi saja, jadi nama harus sama persis dengan teks di QR yang dicetak.</p></div>' +
+    '<div class="card"><h2>Daftar lokasi (' + locs.length + ')</h2><table><tr><th>Lokasi</th><th>Status</th><th></th></tr>' +
+    locs.map(function(l, i){
+      return '<tr><td>' + esc(l.nama) + '</td>' +
         '<td><span class="pill ' + (l.aktif === 'YES' ? 'ok' : 'none') + '">' + (l.aktif === 'YES' ? 'Aktif' : 'Nonaktif') + '</span></td>' +
-        '<td style="white-space:nowrap"><button class="btn sm" data-a="qr" data-id="' + esc(l.id) + '">QR</button> ' +
-        '<button class="btn sm sec" data-a="tg" data-id="' + esc(l.id) + '">' + (l.aktif === 'YES' ? 'Nonaktifkan' : 'Aktifkan') + '</button></td></tr>';
+        '<td style="white-space:nowrap"><button class="btn sm" data-a="qr" data-i="' + i + '">QR</button> ' +
+        '<button class="btn sm sec" data-a="tg" data-i="' + i + '">' + (l.aktif === 'YES' ? 'Nonaktifkan' : 'Aktifkan') + '</button></td></tr>';
     }).join('') + '</table></div>';
   $('addL').onclick = function(){
-    call('adminSaveLocation', { nama: $('ln').value, area: $('la').value }).then(function(a){ S.admin = a; renderLoc(); })
+    call('adminAddLocation', $('ln').value).then(function(a){ S.admin = a; renderLoc(); })
       .catch(function(e){ msg($('lm'), e.message); });
   };
-  $('main').querySelector('table:last-of-type').onclick = function(e){
-    var a = e.target.getAttribute('data-a'), id = e.target.getAttribute('data-id'); if (!a) return;
-    var l = S.admin.locations.filter(function(x){ return x.id === id; })[0];
+  $('main').onclick = function(e){
+    var a = e.target.getAttribute('data-a'), i = e.target.getAttribute('data-i'); if (!a) return;
+    var l = locs[+i];
     if (a === 'qr') return showQr(l);
-    call('adminSaveLocation', { id: l.id, nama: l.nama, area: l.area, aktif: l.aktif === 'YES' ? 'NO' : 'YES' })
+    call('adminSetLocationActive', l.nama, l.aktif === 'YES' ? 'NO' : 'YES')
       .then(function(r){ S.admin = r; renderLoc(); }).catch(function(er){ alert(er.message); });
   };
 }
@@ -357,7 +359,7 @@ function showQr(l){
   qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
   var q = qrcode(0, 'M'); q.addData(l.nama); q.make();
   var m = document.createElement('div'); m.className = 'modal';
-  m.innerHTML = '<div class="card"><h2>' + esc(l.nama) + '</h2><p style="margin:0;color:var(--mute)">' + esc(l.area) + ' · ' + esc(l.id) + '</p>' +
+  m.innerHTML = '<div class="card">' +
     '<div class="qrbox">' + q.createSvgTag(6, 2) + '</div><div style="font-size:22px;font-weight:600;margin:6px 0 12px">' + esc(l.nama) + '</div>' +
     '<div class="row noprint"><button class="btn" id="pr">Cetak</button><button class="btn sec" id="cl">Tutup</button></div></div>';
   document.body.appendChild(m);
