@@ -58,7 +58,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script>
-var S = { token: null, me: null, checklist: [], tab: 'scan', admin: null, dash: null, days: 7, stream: null, raf: 0 };
+var S = { token: null, me: null, tab: 'scan', admin: null, dash: null, days: 7, stream: null, raf: 0 };
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -93,7 +93,6 @@ function call(fn){
 }
 function saveTok(t){ try { if (t) sessionStorage.setItem('fbcf_t', t); else sessionStorage.removeItem('fbcf_t'); } catch (e) {} }
 function msg(el, text, type){ el.innerHTML = text ? '<div class="msg ' + (type || 'err') + '">' + esc(text) + '</div>' : ''; }
-function scorePill(s){ if (s == null) return '<span class="pill none">Belum</span>'; return '<span class="pill ' + (s >= 90 ? 'ok' : s >= 70 ? 'warn' : 'bad') + '">' + s + '%</span>'; }
 
 /* ---------- Login & Boot ---------- */
 function showLogin(note){
@@ -136,7 +135,7 @@ function showRegister(){
 }
 
 function start(r){
-  S.me = r.user; S.checklist = r.checklist; $('appName').textContent = r.appName;
+  S.me = r.user; $('appName').textContent = r.appName;
   $('who').textContent = r.user.nama + ' · ' + r.user.role; $('out').classList.remove('hide');
   $('out').onclick = function(){ call('logout').catch(function(){}).then(function(){ showLogin(); }); };
   var tabs = [['scan','Scan & Isi']];
@@ -167,26 +166,22 @@ function go(t){
 }
 
 /* ---------- Scan & Form ---------- */
-var F = { token: null, items: [], photo: null, thumb: null, lat: '', lng: '' };
+var F = { token: null, photo: null, thumb: null, lat: '', lng: '' };
 
 function viewScan(){
-  F = { token: null, items: [], photo: null, thumb: null, lat: '', lng: '' };
+  F = { token: null, photo: null, thumb: null, lat: '', lng: '' };
   $('main').innerHTML =
     '<div class="card"><h2>1. Scan QR lokasi</h2>' +
     '<video id="vid" class="hide" playsinline muted></video><canvas id="cv" class="hide"></canvas>' +
-    '<div class="row" style="margin-top:8px"><button class="btn" id="bCam">Buka kamera & scan</button>' +
-    '<button class="btn sec" id="bQrPhoto">Foto QR (jika kamera live tidak jalan)</button></div>' +
-    '<input type="file" id="fQr" accept="image/*" capture="environment" class="hide">' +
+    '<button class="btn block" style="margin-top:8px" id="bCam">Buka kamera & scan</button>' +
     '<div id="scanMsg"></div></div><div id="formBox"></div>';
   $('bCam').onclick = startCam;
-  $('bQrPhoto').onclick = function(){ $('fQr').click(); };
-  $('fQr').onchange = function(e){ if (e.target.files[0]) decodeFile(e.target.files[0]); e.target.value = ''; };
 }
 
 function startCam(){
   var m = $('scanMsg');
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    return msg(m, 'Kamera live tidak tersedia di browser ini. Gunakan tombol "Foto QR".', 'info');
+    return msg(m, 'Kamera tidak tersedia di browser ini. Buka aplikasi lewat Chrome/Safari dengan alamat https.', 'err');
   }
   navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(st){
     S.stream = st; var v = $('vid'); v.srcObject = st; v.classList.remove('hide'); v.play(); msg(m, 'Arahkan kamera ke QR…', 'info');
@@ -201,7 +196,7 @@ function startCam(){
       S.raf = requestAnimationFrame(tick);
     })();
   }).catch(function(){
-    msg(m, 'Kamera live diblokir (umum terjadi di web app Apps Script). Gunakan tombol "Foto QR".', 'info');
+    msg(m, 'Kamera tidak bisa dibuka. Izinkan akses kamera untuk situs ini di pengaturan browser, lalu coba lagi.', 'err');
   });
 }
 function stopCam(){
@@ -221,20 +216,12 @@ function loadImg(file, max){
     img.onerror = function(){ rej(new Error('Gambar tidak bisa dibaca')); }; img.src = url;
   });
 }
-function decodeFile(file){
-  loadImg(file, 1200).then(function(c){
-    var d = c.getContext('2d').getImageData(0, 0, c.width, c.height), q = jsQR(d.data, d.width, d.height);
-    if (q && q.data) onQr(q.data); else msg($('scanMsg'), 'QR tidak terbaca. Foto lebih dekat & pastikan tidak buram, lalu coba lagi.', 'err');
-  }).catch(function(e){ msg($('scanMsg'), e.message, 'err'); });
-}
-
 function onQr(text){
   text = String(text || '').trim();
   msg($('scanMsg'), 'Memeriksa QR…', 'info');
   call('checkLocation', text).then(function(r){
     F.token = text; F.name = r.nama; msg($('scanMsg'), 'QR terbaca: ' + r.nama, 'good');
     if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(p){ F.lat = p.coords.latitude; F.lng = p.coords.longitude; }, function(){}, { timeout: 8000 });
-    F.items = S.checklist.map(function(){ return null; });
     renderForm();
   }).catch(function(e){ msg($('scanMsg'), e.message + ' Isi QR: "' + text.slice(0, 60) + '"', 'err'); });
 }
@@ -242,23 +229,12 @@ function onQr(text){
 function renderForm(){
   $('formBox').innerHTML =
     '<div class="card"><h2>2. Checklist floor</h2><div class="msg good" style="margin-top:0">Lokasi: <b>' + esc(F.name) + '</b></div>' +
-    S.checklist.map(function(n, i){
-      return '<div class="chk"><span>' + esc(n) + '</span><div class="tog" data-i="' + i + '">' +
-        '<button class="y" data-v="1">OK</button><button class="n" data-v="0">Tidak</button></div></div>';
-    }).join('') +
-    '<label>Catatan (opsional)</label><textarea id="note" rows="2" maxlength="500"></textarea></div>' +
+    '<label>Catatan (opsional)</label><textarea id="note" rows="3" maxlength="500"></textarea></div>' +
     '<div class="card"><h2>3. Foto lokasi</h2>' +
     '<button class="btn sec block" id="bPhoto">Ambil foto</button>' +
     '<input type="file" id="fPhoto" accept="image/*" capture="environment" class="hide">' +
     '<img id="prev" class="prev hide"></div>' +
     '<button class="btn block" id="bSend">Kirim laporan</button><div id="sendMsg"></div>';
-  document.querySelectorAll('.tog').forEach(function(t){
-    t.onclick = function(e){
-      var v = e.target.getAttribute('data-v'); if (v == null) return;
-      F.items[+t.getAttribute('data-i')] = v === '1';
-      t.querySelector('.y').classList.toggle('on', v === '1'); t.querySelector('.n').classList.toggle('on', v === '0');
-    };
-  });
   $('bPhoto').onclick = function(){ $('fPhoto').click(); };
   $('fPhoto').onchange = function(e){
     var f = e.target.files[0]; if (!f) return;
@@ -271,12 +247,11 @@ function renderForm(){
 
 function send(){
   var m = $('sendMsg');
-  if (F.items.some(function(x){ return x === null; })) return msg(m, 'Isi semua item checklist (OK / Tidak).', 'err');
   if (!F.photo) return msg(m, 'Foto lokasi wajib diambil.', 'err');
   var b = $('bSend'); b.disabled = true; b.textContent = 'Mengirim…'; msg(m, '');
-  call('submitCheck', { token: F.token, items: F.items, note: $('note').value, photo: F.photo, thumb: F.thumb, lat: F.lat, lng: F.lng })
+  call('submitCheck', { token: F.token, note: $('note').value, photo: F.photo, thumb: F.thumb, lat: F.lat, lng: F.lng })
     .then(function(r){
-      $('main').innerHTML = '<div class="card"><h2>Laporan terkirim ✔</h2><p><b>' + esc(r.lokasi) + '</b> · skor ' + r.skor + '%</p>' +
+      $('main').innerHTML = '<div class="card"><h2>Laporan terkirim ✔</h2><p><b>' + esc(r.lokasi) + '</b></p>' +
         '<button class="btn block" id="again">Scan lokasi berikutnya</button></div>';
       $('again').onclick = viewScan;
     }).catch(function(e){ b.disabled = false; b.textContent = 'Kirim laporan'; msg(m, e.message, 'err'); });
@@ -295,24 +270,22 @@ function renderDash(){
     [7, 14, 30].map(function(n){ return '<option value="' + n + '"' + (n === d.days ? ' selected' : '') + '>' + n + ' hari terakhir</option>'; }).join('') +
     '</select><button class="btn sec" id="rf">Refresh</button></div>' +
     '<div class="kpis">' +
-      '<div class="kpi"><span>Cek hari ini</span><b>' + k.today + '</b></div>' +
-      '<div class="kpi"><span>Lokasi sudah dicek</span><b>' + k.locChecked + '/' + k.locTotal + '</b></div>' +
-      '<div class="kpi"><span>Skor rata-rata hari ini</span><b>' + (k.avgToday == null ? '–' : k.avgToday + '%') + '</b></div>' +
-      '<div class="kpi"><span>Skor rata-rata periode</span><b>' + (k.avgPeriod == null ? '–' : k.avgPeriod + '%') + '</b></div></div>' +
-    '<div class="card"><h2>Jumlah cek per hari</h2><div class="bars">' +
-      d.trend.map(function(t){ return '<div title="' + t.count + ' cek, skor ' + (t.skor == null ? '-' : t.skor + '%') + '"><i style="height:' + Math.round(t.count / max * 80) + '%"></i>' + esc(t.tanggal) + '</div>'; }).join('') +
+      '<div class="kpi"><span>Laporan hari ini</span><b>' + k.today + '</b></div>' +
+      '<div class="kpi"><span>Lokasi sudah dicek hari ini</span><b>' + k.locChecked + '/' + k.locTotal + '</b></div>' +
+      '<div class="kpi"><span>Belum dicek hari ini</span><b>' + (k.locTotal - k.locChecked) + '</b></div>' +
+      '<div class="kpi"><span>Laporan ' + d.days + ' hari</span><b>' + k.period + '</b></div></div>' +
+    '<div class="card"><h2>Jumlah laporan per hari</h2><div class="bars">' +
+      d.trend.map(function(t){ return '<div title="' + t.count + ' laporan"><i style="height:' + Math.round(t.count / max * 80) + '%"></i>' + esc(t.tanggal) + '</div>'; }).join('') +
     '</div></div>' +
-    '<div class="card"><h2>Status lokasi hari ini</h2><table><tr><th>Lokasi</th><th>Cek</th><th>Skor terakhir</th><th>Oleh</th></tr>' +
-      d.locStatus.map(function(l){ return '<tr><td>' + esc(l.nama) + '</td><td>' + l.count + 'x</td><td>' + scorePill(l.skor) + '</td><td>' + esc(l.petugas || '–') + (l.waktu ? '<br><small>' + l.waktu + '</small>' : '') + '</td></tr>'; }).join('') +
+    '<div class="card"><h2>Status lokasi hari ini</h2><table><tr><th>Lokasi</th><th>Status</th><th>Terakhir oleh</th></tr>' +
+      d.locStatus.map(function(l){ return '<tr><td>' + esc(l.nama) + '</td><td>' + (l.count ? '<span class="pill ok">Sudah (' + l.count + 'x)</span>' : '<span class="pill bad">Belum</span>') + '</td><td>' + (l.petugas ? esc(l.petugas) + '<br><small>' + l.waktu + '</small>' : '–') + '</td></tr>'; }).join('') +
     '</table></div>' +
-    '<div class="card"><h2>Item paling sering gagal</h2>' +
-      (d.topFail.length ? '<table>' + d.topFail.map(function(f){ return '<tr><td>' + esc(f.item) + '</td><td><span class="pill bad">' + f.n + 'x</span></td></tr>'; }).join('') + '</table>' : '<p style="color:var(--mute)">Belum ada data.</p>') + '</div>' +
     '<div class="card"><h2>Laporan terbaru</h2><table>' +
-      d.recent.map(function(r){ return '<tr><td style="width:64px">' + (r.thumb ? '<img class="thumb" style="cursor:pointer" data-p="' + esc(r.foto_id) + '" src="' + esc(r.thumb) + '">' : '') + '</td><td>' + esc(r.lokasi) + '<br><small style="color:var(--mute)">' + esc(r.waktu) + ' · ' + esc(r.petugas) + '</small>' + (r.catatan ? '<br><small>' + esc(r.catatan) + '</small>' : '') + '</td><td>' + scorePill(r.skor) + '</td></tr>'; }).join('') +
+      (d.recent.length ? d.recent.map(function(r){ return '<tr><td style="width:64px">' + (r.thumb ? '<img class="thumb" style="cursor:pointer" data-p="' + esc(r.foto_id) + '" src="' + esc(r.thumb) + '">' : '') + '</td><td>' + esc(r.lokasi) + '<br><small style="color:var(--mute)">' + esc(r.waktu) + ' · ' + esc(r.petugas) + '</small>' + (r.catatan ? '<br><small>' + esc(r.catatan) + '</small>' : '') + '</td></tr>'; }).join('') : '<tr><td style="color:var(--mute)">Belum ada laporan.</td></tr>') +
     '</table></div>';
   $('days').onchange = function(){ S.days = +this.value; viewDash(); };
-  $('main').onclick = function(e){ var id = e.target.getAttribute && e.target.getAttribute('data-p'); if (id) openPhoto(id); };
   $('rf').onclick = viewDash;
+  $('main').onclick = function(e){ var id = e.target.getAttribute && e.target.getAttribute('data-p'); if (id) openPhoto(id); };
 }
 
 function openPhoto(id){
