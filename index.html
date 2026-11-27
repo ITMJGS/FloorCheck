@@ -62,16 +62,33 @@ var S = { token: null, me: null, checklist: [], tab: 'scan', admin: null, dash: 
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+// Jika halaman ini dihosting di GitHub Pages / hosting lain, isi dengan URL web app Apps Script (berakhiran /exec).
+// Jika dibuka langsung dari URL Apps Script, biarkan saja.
+var API_URL = 'https://script.google.com/macros/s/AKfycbxtBRdo7cPj3y3PrAYwrKER2RYZfdkPLl8rDeGgJ-Ezgvqw_P_fnJHbgxNibn_ca6B9Dw/exec';
+
+function transport(fn, args){
+  if (window.google && google.script && google.script.run){
+    return new Promise(function(res, rej){
+      var r = google.script.run.withSuccessHandler(res).withFailureHandler(function(e){
+        rej(new Error(e && e.message ? e.message.replace(/^Error:\s*/, '') : String(e)));
+      });
+      r[fn].apply(r, args);
+    });
+  }
+  if (!/^https:\/\/script\.google\.com\//.test(API_URL))
+    return Promise.reject(new Error('API_URL di Index.html belum diisi dengan URL web app (/exec).'));
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+    .catch(function(){ throw new Error('Tidak bisa terhubung ke server. Periksa internet dan URL /exec.'); })
+    .then(function(r){ return r.json().catch(function(){ throw new Error('Respons server tidak valid. Pastikan deployment aksesnya "Anyone" dan URL-nya benar (/exec).'); }); })
+    .then(function(j){ if (!j.ok) throw new Error(j.error || 'Terjadi kesalahan.'); return j.data; });
+}
+
 function call(fn){
   var args = Array.prototype.slice.call(arguments, 1);
   if (fn !== 'login' && fn !== 'register') args.unshift(S.token);
-  return new Promise(function(res, rej){
-    var r = google.script.run.withSuccessHandler(res).withFailureHandler(function(e){
-      var m = e && e.message ? e.message.replace(/^Error:\s*/, '') : String(e);
-      if (m.indexOf('SESI_HABIS') >= 0){ showLogin('Sesi berakhir, silakan login lagi.'); return rej(new Error('Sesi berakhir.')); }
-      rej(new Error(m));
-    });
-    r[fn].apply(r, args);
+  return transport(fn, args).catch(function(e){
+    if (e.message.indexOf('SESI_HABIS') >= 0){ showLogin('Sesi berakhir, silakan login lagi.'); throw new Error('Sesi berakhir.'); }
+    throw e;
   });
 }
 function saveTok(t){ try { if (t) sessionStorage.setItem('fbcf_t', t); else sessionStorage.removeItem('fbcf_t'); } catch (e) {} }
