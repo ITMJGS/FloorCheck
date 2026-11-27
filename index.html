@@ -404,18 +404,6 @@ function buildPdf(d){
   });
   y += 21;
 
-  heading('Jumlah laporan per hari');
-  var n = d.trend.length, max = Math.max.apply(null, d.trend.map(function(t){ return t.count; }).concat([1])), ch = 26, slot = CW / n, step = Math.ceil(n / 14);
-  need(ch + 12);
-  d.trend.forEach(function(t, i){
-    var bh = t.count / max * ch, x = M + i * slot + slot * 0.2;
-    doc.setFillColor(31, 138, 91); if (bh > 0) doc.rect(x, y + ch - bh, slot * 0.6, bh, 'F');
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
-    if (t.count > 0){ doc.setTextColor(60); txt(t.count, x + slot * 0.3, y + ch - bh - 1, { align: 'center' }); }
-    if (i % step === 0){ doc.setTextColor(110); txt(t.tanggal, x + slot * 0.3, y + ch + 4, { align: 'center' }); }
-  });
-  doc.setDrawColor(200); doc.line(M, y + ch, W - M, y + ch); y += ch + 8;
-
   heading('Status titik hari ini (' + k.locChecked + '/' + k.locTotal + ' sudah dicek)');
   if (!d.locStatus.length){ doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120); txt('Belum ada lokasi aktif.', M, y); y += 6; }
   groupBy(d.locStatus).forEach(function(g){
@@ -521,7 +509,7 @@ function dashTiles(list){
 }
 
 function renderDash(){
-  var d = S.dash, k = d.kpi, max = Math.max.apply(null, d.trend.map(function(t){ return t.count; }).concat([1]));
+  var d = S.dash, k = d.kpi;
   $('main').innerHTML =
     '<div class="row noprint" style="margin-bottom:10px"><select id="days">' +
     [7, 14, 30].map(function(n){ return '<option value="' + n + '"' + (n === d.days ? ' selected' : '') + '>' + n + ' hari terakhir</option>'; }).join('') +
@@ -531,9 +519,6 @@ function renderDash(){
       '<div class="kpi"><span>Lokasi sudah dicek hari ini</span><b>' + k.locChecked + '/' + k.locTotal + '</b></div>' +
       '<div class="kpi"><span>Belum dicek hari ini</span><b>' + (k.locTotal - k.locChecked) + '</b></div>' +
       '<div class="kpi"><span>Laporan ' + d.days + ' hari</span><b>' + k.period + '</b></div></div>' +
-    '<div class="card"><h2>Jumlah laporan per hari</h2><div class="bars">' +
-      d.trend.map(function(t){ return '<div title="' + t.count + ' laporan"><i style="height:' + Math.round(t.count / max * 80) + '%"></i>' + esc(t.tanggal) + '</div>'; }).join('') +
-    '</div></div>' +
     '<div class="card"><h2>Status titik hari ini</h2>' + dashTiles(d.locStatus) + '</div>' +
     '<div class="card"><h2>Laporan terbaru</h2><table>' +
       (d.recent.length ? d.recent.map(function(r){ return '<tr><td style="width:64px">' + (r.thumb ? '<img class="thumb" style="cursor:pointer" data-p="' + esc(r.foto_id) + '" src="' + esc(r.thumb) + '">' : '') + '</td><td>' + esc(r.lokasi) + '<br><small style="color:var(--mute)">' + esc(r.waktu) + ' · ' + esc(r.petugas) + '</small>' + (r.catatan ? '<br><small>' + esc(r.catatan) + '</small>' : '') + '</td></tr>'; }).join('') : '<tr><td style="color:var(--mute)">Belum ada laporan.</td></tr>') +
