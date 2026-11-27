@@ -14,6 +14,11 @@
   header b{font-size:18px} header small{opacity:.75;display:block;font-size:13px}
   header #out,header #bell{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.55)}
   .topr{display:flex;gap:8px;align-items:center}
+  .cheer{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:rgba(10,20,35,.45);animation:chIn .2s ease-out}
+  .cheer .box{background:#fff;border-radius:20px;padding:22px 26px;text-align:center;max-width:300px;box-shadow:0 12px 40px rgba(0,0,0,.35);animation:chPop .35s cubic-bezier(.2,1.4,.4,1)}
+  .cheer .em{font-size:44px;line-height:1.1} .cheer .tx{font-size:22px;font-weight:800;color:#17304f;margin-top:8px} .cheer .pc{color:var(--mute);font-size:13px;margin-top:4px}
+  @keyframes chIn{from{opacity:0}to{opacity:1}} @keyframes chPop{from{transform:scale(.6)}to{transform:scale(1)}}
+  @media (prefers-reduced-motion:reduce){.cheer,.cheer .box{animation:none}}
   .toasts{position:fixed;top:10px;left:10px;right:10px;max-width:420px;margin-left:auto;z-index:60}
   .toast{background:#17304f;color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;box-shadow:0 6px 20px rgba(0,0,0,.3);display:flex;gap:10px;align-items:center;cursor:pointer}
   .toast small{opacity:.8}
@@ -282,8 +287,26 @@ function go(t){
 }
 
 /* ---------- Patroli ---------- */
-function newP(u){ return { user: u || null, points: [], done: {}, sent: {}, started: null, sending: false, lastQr: '', lastAt: 0, lastTick: 0 }; }
+function newP(u){ return { user: u || null, points: [], done: {}, sent: {}, started: null, sending: false, lastQr: '', lastAt: 0, lastTick: 0, cheer: 0 }; }
 var P = newP();
+
+/* Pop up semangat saat progres patroli mencapai 30%, 60%, 90% (masing-masing sekali per patroli) */
+var CHEERS = [{ at: 90, em: '💪', tx: 'Kamu Bisa!' }, { at: 60, em: '🔥', tx: 'Lebih Semangat Lagi!' }, { at: 30, em: '🚶', tx: 'Ayo Semangat!' }];
+function showCheer(c, pct){
+  var old = $('cheer'); if (old) old.remove();
+  var el = document.createElement('div'); el.id = 'cheer'; el.className = 'cheer';
+  el.innerHTML = '<div class="box"><div class="em">' + c.em + '</div><div class="tx">' + esc(c.tx) + '</div><div class="pc">Patroli ' + pct + '% selesai</div></div>';
+  var close = function(){ if (el.parentNode) el.remove(); };
+  el.onclick = close; document.body.appendChild(el); setTimeout(close, 2600);
+}
+function checkCheer(){
+  var total = P.points.length; if (!total) return;
+  var n = Object.keys(P.done).length + Object.keys(P.sent).length, pct = Math.round(n * 100 / total);
+  for (var i = 0; i < CHEERS.length; i++) {
+    var c = CHEERS[i];
+    if (pct >= c.at) { if (P.cheer < c.at) { P.cheer = c.at; showCheer(c, pct); } return; }
+  }
+}
 
 function norm(s){ return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' '); }
 function keyOf(t){ return norm(String(t || '').replace(/^\s*FBCF:/i, '')); }
@@ -399,7 +422,7 @@ function onScan(text){
   if (navigator.vibrate) navigator.vibrate(80);
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(p){ it.lat = p.coords.latitude; it.lng = p.coords.longitude; }, function(){}, { timeout: 8000, maximumAge: 60000 });
   msg(m, '✔ ' + pt.nama + ' — ketuk kotak hijau jika ingin menambah foto atau catatan (opsional)', 'good');
-  refreshPatrol(); pingNow(); startPing();
+  refreshPatrol(); pingNow(); startPing(); checkCheer();
 }
 
 function openPoint(k){
