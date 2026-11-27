@@ -1,1454 +1,402 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+<base target="_top">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Room Service Floor Check</title>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<title>FB Cek Floor</title>
 <style>
-  :root{
-    --bg:#f3f5f8; --card:#fff; --ink:#1b2333; --muted:#6b7487; --line:#e3e7ee;
-    --brand:#16324f; --brand-ink:#fff; --accent:#c99a3c;
-    --ok:#1f8a5b; --ok-bg:#e6f5ee; --warn:#b4690e; --warn-bg:#fdf1e1; --bad:#c0392b; --bad-bg:#fbe9e7;
-    --radius:14px;
-  }
+  :root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1b;--mute:#6b6a65;--line:#e4e2dc;--acc:#0f6b4f;--accbg:#e3f1ec;--bad:#b3261e;--badbg:#fbe7e5;--warn:#9a6700;--warnbg:#fff3d6}
   *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
-  .hidden{display:none!important}
-  button,input,select{font:inherit}
-  .topbar{background:var(--brand);color:var(--brand-ink);padding:12px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10}
-  .topbar .brand{font-weight:700;letter-spacing:.2px;flex:1}
-  .topbar .brand small{display:block;font-weight:400;opacity:.75;font-size:12px}
-  .tabs{display:flex;gap:4px;background:var(--brand);padding:0 12px 10px;overflow-x:auto;position:sticky;top:56px;z-index:9}
-  .tabs button{border:0;background:transparent;color:#c9d4e2;padding:8px 14px;border-radius:999px;white-space:nowrap;cursor:pointer}
-  .tabs button.active{background:#fff;color:var(--brand);font-weight:600}
-  main{max-width:760px;margin:0 auto;padding:16px 16px 110px}
-  .card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,30,50,.06)}
-  h2{font-size:18px;margin:0 0 12px} h3{font-size:15px;margin:0 0 8px}
-  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
-  input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
-  input:focus,select:focus{outline:2px solid var(--accent);border-color:transparent}
-  .btn{border:0;border-radius:10px;padding:11px 16px;cursor:pointer;font-weight:600;background:var(--line);color:var(--ink)}
-  .btn.primary{background:var(--brand);color:#fff}
-  .btn.accent{background:var(--accent);color:#fff}
-  .btn.ok{background:var(--ok);color:#fff}
-  .btn.danger{background:var(--bad-bg);color:var(--bad)}
-  .btn.ghost{background:transparent;color:inherit;border:1px solid rgba(255,255,255,.35);padding:7px 12px}
-  .btn.sm{padding:6px 10px;font-size:13px}
-  .btn:disabled{opacity:.55;cursor:wait}
-  .row{display:flex;gap:10px;flex-wrap:wrap} .row>*{flex:1}
-  .muted{color:var(--muted);font-size:13px}
-  .link{background:none;border:0;color:var(--brand);text-decoration:underline;cursor:pointer;padding:0}
-  .login-wrap{max-width:380px;margin:8vh auto 0}
-  .login-logo{text-align:center;margin-bottom:18px}
-  .login-logo .mark{width:56px;height:56px;border-radius:16px;background:var(--brand);color:var(--accent);display:inline-grid;place-items:center;font-size:26px;font-weight:800}
-  .login-logo h1{font-size:20px;margin:10px 0 2px}
-  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-  .meta div{background:var(--bg);border-radius:10px;padding:8px 10px}
-  .meta b{display:block;font-size:14px} .meta span{font-size:12px;color:var(--muted)}
-  .progress{height:10px;background:var(--line);border-radius:999px;overflow:hidden}
-  .progress i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
-  #reader{width:100%;border-radius:12px;overflow:hidden;background:#000;margin-top:12px}
-  #reader:empty{display:none}
-  #reader{position:relative}
-  #reader video{display:block;width:100%;max-height:60vh;object-fit:cover;background:#000}
-  #reader .scan-frame{position:absolute;left:50%;top:50%;width:min(62%,42vh);aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,.28);pointer-events:none}
-  .last-scan{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px}
-  .last-scan.ok{background:var(--ok-bg);color:var(--ok)} .last-scan.warn{background:var(--warn-bg);color:var(--warn)} .last-scan.bad{background:var(--bad-bg);color:var(--bad)}
-  .floor{margin-bottom:10px}
-  .floor-head{display:flex;justify-content:space-between;font-weight:600;font-size:14px;margin-bottom:6px}
-  .chips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-  .chip{border:1px dashed var(--line);border-radius:10px;padding:8px;font-size:12.5px;text-align:center;color:var(--muted);background:#fafbfc}
-  .chip.done{border:1px solid transparent;background:var(--ok-bg);color:var(--ok);font-weight:600}
-  .chip{position:relative}
-  button.chip{font:inherit;cursor:pointer;width:100%}
-  .chip .ph{display:block;font-size:11px;margin-top:3px;font-weight:600}
-  .chip .ph.add{color:var(--brand)} .chip .ph.wait{color:var(--warn)}
-  .chip-thumb{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:6px;object-fit:cover;border:1px solid #fff}
-  .chip:has(.chip-thumb){padding-left:32px;padding-right:32px}
-  .last-scan .btn{margin-top:8px;width:100%}
-  .pm{position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column;color:#fff}
-  .pm-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px}
-  .pm-head b{font-size:15px}
-  .pm-stage{flex:1;position:relative;overflow:hidden}
-  .pm-stage video,.pm-stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
-  .pm-foot{padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;justify-content:center}
-  #pm-live{display:flex;align-items:center;justify-content:center;width:100%;position:relative;min-height:72px}
-  .pm-shutter{width:72px;height:72px;border-radius:50%;border:5px solid #fff;background:rgba(255,255,255,.25);cursor:pointer}
-  .pm-shutter:active{background:#fff}
-  #pm-native{position:absolute;left:0}
-  #pm-review{width:100%;max-width:420px}
-  .ph-link{color:var(--ok);text-decoration:none}
-  .rep-photos{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
-  .rep-photos-h{font-size:13px;font-weight:700;margin-bottom:8px}
-  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
-  .pitem{display:block;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
-  .pitem img,.pitem .ph-ph{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--bg)}
-  .pitem .ph-ph{display:grid;place-items:center;font-size:22px}
-  .pitem span{display:block;padding:5px 7px;font-size:11.5px;line-height:1.3;font-weight:600}
-  .pitem small{display:block;font-weight:400;color:var(--muted)}
-  .pitem em{display:block;font-style:normal;color:var(--brand);font-weight:600;margin-top:2px}
-  .chip small{display:block;font-weight:400;font-size:11px;margin-top:2px}
-  .bottombar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;justify-content:center;z-index:8}
-  .bottombar .btn{flex:1;max-width:360px}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{font-size:12px;color:var(--muted);font-weight:600}
-  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
-  .b-aktif{background:var(--ok-bg);color:var(--ok)} .b-menunggu{background:var(--warn-bg);color:var(--warn)} .b-nonaktif{background:var(--bad-bg);color:var(--bad)}
-  .b-role{background:#e8eef6;color:var(--brand)}
-  .table-wrap{overflow-x:auto}
-  .rep-title{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-  .rep-actions{display:flex;gap:6px}
-  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
-  .stat{background:var(--bg);border-radius:10px;padding:10px 12px}
-  .stat b{display:block;font-size:22px;line-height:1.15;font-variant-numeric:tabular-nums}
-  .stat span{font-size:12px;color:var(--muted)}
-  .stat.ok b{color:var(--ok)} .stat.warn b{color:var(--warn)}
-  .rep{background:var(--card);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,30,50,.06);break-inside:avoid}
-  .rep-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-  .rep-name{font-weight:700}
-  .loglist{margin-top:12px}
-  .lrow{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
-  .lrow:last-child{border-bottom:0}
-  .lrow time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:2px}
-  .lrow .who{font-weight:600;font-size:14px}
-  .lrow .det{grid-column:2;font-size:13px;color:var(--muted);word-break:break-word}
-  .lday{font-size:12px;font-weight:700;color:var(--brand);margin:14px 0 2px;text-transform:uppercase;letter-spacing:.3px}
-  .lbadge{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:999px;margin-left:6px;background:#e8eef6;color:var(--brand)}
-  .lbadge.bad{background:var(--bad-bg);color:var(--bad)} .lbadge.ok{background:var(--ok-bg);color:var(--ok)} .lbadge.warn{background:var(--warn-bg);color:var(--warn)}
-  .perm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
-  .perm-grid label{display:flex;align-items:center;gap:8px;margin:0;padding:9px 10px;border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:14px;cursor:pointer;background:#fff}
-  .perm-grid label:has(input:checked){border-color:var(--brand);background:#eef3fa}
-  .perm-grid input{width:auto;margin:0;accent-color:var(--brand)}
-  .perm-list{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4}
-  .ulist{margin-top:8px}
-  .urow{border-bottom:1px solid var(--line);padding:12px 0}
-  .urow:last-child{border-bottom:0}
-  .urow-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-  .urow-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
-  .ulist .empty-row{color:var(--muted);padding:12px 0}
-  @media (max-width:380px){.perm-grid{grid-template-columns:1fr}}
-  .quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
-  .quick button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
-  .quick button.active{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
-  .rep-note{font-size:12.5px;color:var(--warn);background:var(--warn-bg);border-radius:8px;padding:8px 10px;margin-top:10px}
-  .rep-sub{font-size:13px;color:var(--muted);margin-top:2px}
-  .rep-bar{display:flex;align-items:center;gap:10px;margin-top:10px}
-  .rep-bar .progress{flex:1;height:8px}
-  .rep-bar .progress i.warn{background:var(--accent)}
-  .rep-pct{font-weight:700;font-size:13px;min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
-  .rep details{margin-top:10px}
-  .rep summary{cursor:pointer;font-size:13px;color:var(--brand);font-weight:600}
-  .fgrid-wrap{overflow-x:auto;max-width:100%}
-  .fgrid{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
-  .fgrid th,.fgrid td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:center}
-  .fgrid th:first-child,.fgrid td:first-child{text-align:left;white-space:nowrap}
-  .fgrid .y{color:var(--ok);font-weight:600} .fgrid .n{color:var(--bad);font-weight:600}
-  .fgrid small{display:block;font-weight:400;color:var(--muted);font-size:11px}
-  .empty{text-align:center;color:var(--muted);padding:24px 8px}
-  .print-only{display:none}
-  @media (max-width:420px){.stats{grid-template-columns:repeat(2,1fr)}}
-  .qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px}
-  .qr-card{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center;background:#fff;break-inside:avoid}
-  .qr-card .qr{display:flex;justify-content:center}
-  .qr-card .qr img,.qr-card .qr canvas{width:130px!important;height:130px!important}
-  .qr-card b{display:block;margin-top:8px;font-size:13px}
-  #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s;z-index:70}
-  #toast.show{opacity:1} #toast.bad{background:var(--bad)} #toast.ok{background:var(--ok)}
-  @media (max-width:420px){.chips{grid-template-columns:repeat(2,1fr)}.meta{grid-template-columns:1fr 1fr}}
-  @media print{
-    body{background:#fff} .topbar,.tabs,.bottombar,#toast,.no-print{display:none!important}
-    main{max-width:none;padding:0} .card{box-shadow:none;padding:0}
-    .qr-grid{grid-template-columns:repeat(4,1fr)}
-    .print-only{display:block!important}
-    .rep{box-shadow:none;border:1px solid var(--line);padding:10px 12px}
-    .rep summary{display:none}
-    .pgrid{grid-template-columns:repeat(6,1fr)}
-    .pitem em{font-size:0;word-break:break-all;font-weight:400}
-    .pitem em::after{content:attr(data-url);font-size:8px}
-    .stat{border:1px solid var(--line)}
-    .lrow{padding:5px 0;break-inside:avoid} .lrow .det a{color:inherit}
-    .up-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:10px}
-    .up-head h1{font-size:18px;margin:0} .up-head div{font-size:11px;color:var(--muted);text-align:right}
-    .up-sum{font-size:12px;margin:0 0 8px}
-    .up-table{width:100%;border-collapse:collapse;font-size:12px}
-    .up-table th,.up-table td{border:1px solid #c9ced8;padding:6px 8px;text-align:left}
-    .up-table th{background:#eef1f5;color:var(--ink)}
-    .up-table td.c{text-align:center;width:32px}
-    .up-table tr{break-inside:avoid}
-  }
+  body{margin:0;font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:var(--ink);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  header b{font-size:16px} header small{opacity:.7;display:block;font-size:12px}
+  nav{display:flex;gap:4px;padding:8px 12px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto;position:sticky;top:0;z-index:5}
+  nav button{border:0;background:none;padding:8px 14px;border-radius:8px;font:inherit;color:var(--mute);white-space:nowrap;cursor:pointer}
+  nav button.on{background:var(--accbg);color:var(--acc);font-weight:600}
+  main{max-width:960px;margin:0 auto;padding:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+  h2{font-size:16px;margin:0 0 10px} h3{font-size:14px;margin:14px 0 8px;color:var(--mute)}
+  button.btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:600;cursor:pointer}
+  button.btn.sec{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  button.btn.sm{padding:6px 10px;font-size:13px;border-radius:8px}
+  button.btn:disabled{opacity:.5}
+  .block{display:block;width:100%}
+  input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+  .row{display:flex;gap:8px;flex-wrap:wrap} .row>*{flex:1;min-width:120px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .kpi span{display:block;font-size:12px;color:var(--mute)} .kpi b{font-size:26px}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+  .ok{background:var(--accbg);color:var(--acc)} .bad{background:var(--badbg);color:var(--bad)} .warn{background:var(--warnbg);color:var(--warn)} .none{background:#eee;color:var(--mute)}
+  table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{font-size:12px;color:var(--mute);font-weight:600}
+  .bars{display:flex;align-items:flex-end;gap:4px;height:110px;padding-top:6px}
+  .bars div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;font-size:10px;color:var(--mute)}
+  .bars i{display:block;width:100%;background:var(--acc);border-radius:4px 4px 0 0;min-height:2px}
+  .chk{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .tog{display:flex;gap:6px} .tog button{border:1px solid var(--line);background:#fff;padding:6px 12px;border-radius:8px;font:inherit;cursor:pointer}
+  .tog button.y.on{background:var(--accbg);color:var(--acc);border-color:var(--acc)} .tog button.n.on{background:var(--badbg);color:var(--bad);border-color:var(--bad)}
+  video{width:100%;border-radius:10px;background:#000;max-height:60vh}
+  .thumb{width:56px;height:56px;border-radius:8px;object-fit:cover;background:#eee}
+  .prev{width:100%;max-height:260px;object-fit:cover;border-radius:10px;margin-top:8px}
+  .msg{padding:10px 12px;border-radius:8px;margin:10px 0;font-size:14px}
+  .msg.err{background:var(--badbg);color:var(--bad)} .msg.good{background:var(--accbg);color:var(--acc)} .msg.info{background:var(--warnbg);color:var(--warn)}
+  .hide{display:none!important}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+  .modal .card{max-width:360px;width:100%;text-align:center;margin:0}
+  .qrbox svg{width:100%;height:auto;max-width:260px}
+  @media print{header,nav,.noprint{display:none!important} .modal{position:static;background:none} body{background:#fff}}
 </style>
 </head>
 <body>
+<header><div><b id="appName">FB Cek Floor</b><small id="who"></small></div><button class="btn sm sec hide" id="out">Keluar</button></header>
+<nav id="nav" class="hide"></nav>
+<main id="main"><div class="card">Memuat…</div></main>
 
-<header id="topbar" class="topbar hidden">
-  <div class="brand">Room Service Floor Check<small id="who"></small></div>
-  <button class="btn ghost sm" id="btn-logout">Keluar</button>
-</header>
-<nav id="tabs" class="tabs hidden"></nav>
-
-<main>
-  <!-- LOGIN / DAFTAR -->
-  <section id="v-login" class="hidden">
-    <div class="login-wrap">
-      <div class="login-logo"><div class="mark">RS</div><h1>Room Service Floor Check</h1><div class="muted">Patroli lantai dengan scan QR</div></div>
-      <form class="card" id="f-login">
-        <h2>Masuk</h2>
-        <label>Username</label><input id="l-user" autocomplete="username" required>
-        <label>Password</label><input id="l-pass" type="password" autocomplete="current-password" required>
-        <div style="margin-top:16px"><button class="btn primary" style="width:100%">Masuk</button></div>
-        <p class="muted" style="text-align:center;margin-bottom:0">Belum punya akun? <button type="button" class="link" data-go="register">Daftar</button></p>
-      </form>
-      <form class="card hidden" id="f-register">
-        <h2>Daftar akun</h2>
-        <p class="muted" style="margin-top:0">Akun baru harus disetujui admin sebelum bisa login.</p>
-        <label>Nama lengkap</label><input id="r-nama" required>
-        <label>Username</label><input id="r-user" autocomplete="username" required>
-        <label>Password (min. 6 karakter)</label><input id="r-pass" type="password" autocomplete="new-password" required>
-        <div style="margin-top:16px"><button class="btn primary" style="width:100%">Kirim pendaftaran</button></div>
-        <p class="muted" style="text-align:center;margin-bottom:0"><button type="button" class="link" data-go="login">Kembali ke login</button></p>
-      </form>
-    </div>
-  </section>
-
-  <!-- PATROLI -->
-  <section id="v-patrol" class="hidden">
-    <div class="card" id="patrol-idle">
-      <h2>Patroli lantai</h2>
-      <p class="muted" id="cp-count">Memuat titik cek…</p>
-      <button class="btn primary" id="btn-start" style="width:100%" disabled>Mulai Patroli</button>
-    </div>
-
-    <div id="patrol-active" class="hidden">
-      <div class="card">
-        <div class="meta">
-          <div><span>Petugas</span><b id="m-nama"></b></div>
-          <div><span>Tanggal</span><b id="m-tgl"></b></div>
-          <div><span>Mulai</span><b id="m-jam"></b></div>
-        </div>
-        <div class="row" style="align-items:center;margin-bottom:6px">
-          <b id="m-progress-text" style="flex:none"></b><span class="muted" style="text-align:right">titik sudah di-scan</span>
-        </div>
-        <div class="progress"><i id="m-progress"></i></div>
-
-        <div class="row" style="margin-top:14px">
-          <button class="btn accent" id="btn-cam">Buka Kamera</button>
-          <label class="btn" style="margin:0;text-align:center;color:var(--ink);font-size:inherit">Foto QR
-            <input type="file" id="file-qr" accept="image/*" capture="environment" class="hidden">
-          </label>
-        </div>
-        <div id="cam-row" class="hidden" style="margin-top:10px">
-          <label style="margin-top:0">Kamera (ganti jika gambar gelap)</label>
-          <select id="cam-select"></select>
-        </div>
-        <div id="reader"></div>
-        <div id="cam-status" class="muted hidden" style="margin-top:6px"></div>
-        <div id="last-scan" class="last-scan hidden"></div>
-      </div>
-
-      <div class="card"><h3>Daftar titik cek</h3><div id="cp-list"></div></div>
-    </div>
-  </section>
-
-  <!-- TANPA AKSES -->
-  <section id="v-none" class="hidden">
-    <div class="card" style="text-align:center">
-      <h2>Belum ada hak akses</h2>
-      <p class="muted">Akun Anda sudah aktif, tetapi belum diberi hak akses ke menu apa pun. Hubungi admin.</p>
-    </div>
-  </section>
-
-  <!-- LAPORAN -->
-  <section id="v-reports" class="hidden">
-    <div class="card">
-      <div class="rep-title">
-        <h2 style="margin:0">Laporan patroli</h2>
-        <div class="no-print rep-actions">
-          <button class="btn sm" id="btn-reload-rep">Muat ulang</button>
-          <button class="btn sm primary" id="btn-print-rep">Cetak</button>
-        </div>
-      </div>
-      <div class="row no-print" style="flex-wrap:nowrap">
-        <div style="min-width:0"><label>Dari tanggal</label><input type="date" id="rep-from"></div>
-        <div style="min-width:0"><label>Sampai tanggal</label><input type="date" id="rep-to"></div>
-      </div>
-      <div class="quick no-print" id="rep-quick">
-        <button type="button" data-q="today">Hari ini</button>
-        <button type="button" data-q="yesterday">Kemarin</button>
-        <button type="button" data-q="7">7 hari</button>
-        <button type="button" data-q="30">30 hari</button>
-        <button type="button" data-q="month">Bulan ini</button>
-        <button type="button" data-q="all">Semua</button>
-      </div>
-      <div class="no-print">
-        <label>Petugas</label><select id="rep-name"><option value="">Semua petugas</option></select>
-      </div>
-      <p class="muted print-only" id="rep-filter-text"></p>
-      <div class="stats" id="rep-stats"></div>
-    </div>
-    <div id="rep-list"></div>
-  </section>
-
-  <!-- PENGGUNA -->
-  <section id="v-users" class="hidden">
-    <form class="card no-print" id="f-user">
-      <h2 id="u-title">Tambah pengguna</h2>
-      <div class="row">
-        <div><label>Username</label><input id="u-username" required></div>
-        <div><label>Nama</label><input id="u-nama" required></div>
-      </div>
-      <div class="row">
-        <div><label>Role</label><select id="u-role">
-          <option value="petugas">Petugas</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select></div>
-        <div><label>Status</label><select id="u-status">
-          <option>Aktif</option><option>Nonaktif</option><option>Menunggu</option></select></div>
-      </div>
-      <label>Hak akses</label>
-      <div class="perm-grid" id="u-perms"></div>
-      <p class="muted" style="margin:6px 0 0">Centang awal mengikuti role. Mengganti role akan mengisi ulang centang.</p>
-      <label id="u-pass-label">Password</label><input id="u-password" type="password" autocomplete="new-password">
-      <div class="row" style="margin-top:14px">
-        <button class="btn primary">Simpan</button>
-        <button type="button" class="btn" id="btn-u-reset">Batal</button>
-      </div>
-    </form>
-    <div class="card no-print">
-      <div class="rep-title"><h2 style="margin:0">Daftar pengguna</h2>
-        <div class="rep-actions">
-          <button class="btn sm" id="btn-reload-users">Muat ulang</button>
-          <button class="btn sm primary" id="btn-print-users">Cetak</button>
-        </div></div>
-      <div class="ulist" id="u-tbody"></div>
-    </div>
-    <div class="print-only" id="u-print"></div>
-  </section>
-
-  <!-- LOG AKTIVITAS -->
-  <section id="v-logs" class="hidden">
-    <div class="card">
-      <div class="rep-title">
-        <h2 style="margin:0">Log aktivitas</h2>
-        <div class="no-print rep-actions">
-          <button class="btn sm" id="btn-reload-log">Muat ulang</button>
-          <button class="btn sm primary" id="btn-print-log">Cetak</button>
-        </div>
-      </div>
-      <div class="row no-print" style="flex-wrap:nowrap">
-        <div style="min-width:0"><label>Dari tanggal</label><input type="date" id="log-from"></div>
-        <div style="min-width:0"><label>Sampai tanggal</label><input type="date" id="log-to"></div>
-      </div>
-      <div class="quick no-print" id="log-quick">
-        <button type="button" data-q="today">Hari ini</button>
-        <button type="button" data-q="yesterday">Kemarin</button>
-        <button type="button" data-q="7">7 hari</button>
-        <button type="button" data-q="30">30 hari</button>
-        <button type="button" data-q="all">Semua</button>
-      </div>
-      <div class="row no-print">
-        <div><label>Pengguna</label><select id="log-name"><option value="">Semua pengguna</option></select></div>
-        <div><label>Aktivitas</label><select id="log-act"><option value="">Semua aktivitas</option></select></div>
-      </div>
-      <p class="muted print-only" id="log-filter-text"></p>
-      <div id="log-list" class="loglist"></div>
-    </div>
-  </section>
-
-  <!-- QR CODE -->
-  <section id="v-qr" class="hidden">
-    <div class="card">
-      <div class="no-print">
-        <h2>QR Code titik cek</h2>
-        <p class="muted">Isi tiap QR sama persis dengan judul kolom di spreadsheet. Cetak lalu tempel di masing-masing titik.</p>
-        <div class="row"><button class="btn primary" id="btn-qr-gen">Tampilkan QR</button><button class="btn" id="btn-qr-print">Cetak</button></div>
-      </div>
-      <div class="qr-grid" id="qr-grid"></div>
-    </div>
-  </section>
-</main>
-
-<div id="patrol-bar" class="bottombar hidden">
-  <button class="btn danger" id="btn-cancel">Batalkan</button>
-  <button class="btn ok" id="btn-submit">Kirim</button>
-</div>
-<div id="pm" class="pm hidden">
-  <div class="pm-head"><b id="pm-title"></b><button class="btn ghost sm" id="pm-close">Batal</button></div>
-  <div class="pm-stage"><video id="pm-video" playsinline muted autoplay></video><img id="pm-img" class="hidden" alt="Pratinjau foto"></div>
-  <div class="pm-foot">
-    <div id="pm-live">
-      <button class="btn ghost sm" id="pm-native">Kamera HP</button>
-      <button class="pm-shutter" id="pm-shot" aria-label="Ambil foto"></button>
-    </div>
-    <div id="pm-review" class="row hidden"><button class="btn" id="pm-retake">Ulangi</button><button class="btn ok" id="pm-use">Pakai foto</button></div>
-  </div>
-</div>
-<input type="file" id="file-photo" accept="image/*" capture="environment" class="hidden">
-<div id="toast"></div>
-
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script>
-const $ = s => document.querySelector(s);
-const S = { token:null, user:null, cps:[], patrol:null, lastText:'', lastAt:0, view:null,
-  photoBusy:{}, photoVer:{}, photoMode:false, photoCp:null, shot:null, forceNative:false, reopenCam:false };
-const ROLE_LABEL = { admin:'Admin', supervisor:'Supervisor', petugas:'Petugas' };
-/* hak akses per pengguna — harus sama dengan PERMS / ROLE_PERMS di Code.gs */
-const PERM_LIST = [
-  ['patroli', 'Patroli (scan QR)', 'Patroli'],
-  ['foto', 'Ambil foto', 'Foto'],
-  ['laporan', 'Lihat laporan', 'Laporan'],
-  ['cetak_laporan', 'Cetak laporan', 'Cetak laporan'],
-  ['kelola_pengguna', 'Kelola pengguna', 'Kelola pengguna'],
-  ['setujui', 'Setujui pendaftaran', 'Setujui'],
-  ['qr', 'Cetak QR Code', 'QR Code'],
-  ['log', 'Lihat log aktivitas', 'Log']
-];
-const ROLE_PERMS = {
-  admin: PERM_LIST.map(p => p[0]),
-  supervisor: ['patroli', 'foto', 'laporan', 'cetak_laporan'],
-  petugas: ['patroli', 'foto']
-};
-function userPerms(u){ return Array.isArray(u && u.akses) ? u.akses : (ROLE_PERMS[u && u.role] || []); }
-function can(p){ return userPerms(S.user).includes(p); }
-function permNames(list){ return PERM_LIST.filter(p => list.includes(p[0])).map(p => p[2]).join(', ') || 'Tidak ada akses'; }
+var S = { token: null, me: null, checklist: [], tab: 'scan', admin: null, dash: null, days: 7, stream: null, raf: 0 };
 
-/* ---------- util ---------- */
-const store = {
-  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
-  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
-  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
-};
-const norm = s => String(s == null ? '' : s).trim().replace(/\s+/g,' ').toLowerCase();
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmtTime = iso => new Date(iso).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
-const fmtDate = iso => new Date(iso).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
-
-let toastTimer;
-function toast(msg, type){
-  const t = $('#toast'); t.textContent = msg; t.className = 'show ' + (type||'');
-  clearTimeout(toastTimer); toastTimer = setTimeout(()=> t.className = '', 3200);
-}
-function cleanErr(m){ return String(m||'').replace(/^(Error|Exception):\s*/,'').replace(/^SESSION:\s*/,''); }
-
-/* =====================================================================
-   GANTI dengan Web app URL dari Apps Script (Deploy → Manage deployments)
-   Contoh: https://script.google.com/macros/s/AKfycb.../exec
-   ===================================================================== */
-const API_URL = 'https://script.google.com/macros/s/AKfycbx0lXve84tJxKlngKqzjcP3WdAfOCrNhNIO3p4tUMQpLLVDUCA2HKQeeAgsDblcvWcC/exec';
-
-async function api(fn, ...args){
-  let res, j;
-  try{
-    res = await fetch(API_URL, {
-      method:'POST',
-      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-      body:JSON.stringify({ fn, args }),
-      redirect:'follow'
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function call(fn){
+  var args = Array.prototype.slice.call(arguments, 1);
+  if (fn !== 'login' && fn !== 'register') args.unshift(S.token);
+  return new Promise(function(res, rej){
+    var r = google.script.run.withSuccessHandler(res).withFailureHandler(function(e){
+      var m = e && e.message ? e.message.replace(/^Error:\s*/, '') : String(e);
+      if (m.indexOf('SESI_HABIS') >= 0){ showLogin('Sesi berakhir, silakan login lagi.'); return rej(new Error('Sesi berakhir.')); }
+      rej(new Error(m));
     });
-  }catch(e){ throw new Error('Tidak bisa terhubung ke server. Cek internet atau API_URL.'); }
-  try{ j = await res.json(); }
-  catch(e){ throw new Error('Server tidak merespons dengan benar. Pastikan deploy Apps Script aksesnya "Anyone".'); }
-  if (!j.ok){
-    const raw = j.error || 'Terjadi kesalahan.';
-    if (raw.indexOf('SESSION') >= 0) forceLogout(cleanErr(raw));
-    throw new Error(cleanErr(raw));
-  }
-  return j.data;
-}
-async function withBusy(btn, fn){
-  if (btn) btn.disabled = true;
-  try { return await fn(); } finally { if (btn) btn.disabled = false; }
-}
-function beep(){
-  try{
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.frequency.value = 880; g.gain.value = 0.15; o.connect(g); g.connect(ctx.destination);
-    o.start(); o.stop(ctx.currentTime + 0.12);
-  }catch(e){}
-  try{ navigator.vibrate && navigator.vibrate(80); }catch(e){}
-}
-
-/* ---------- views ---------- */
-function show(view){
-  ['login','patrol','reports','users','qr','logs','none'].forEach(v => $('#v-'+v).classList.toggle('hidden', v !== view));
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-  if (S.view === 'patrol' && view !== 'patrol') closeCamera();
-  S.view = view;
-  $('#patrol-bar').classList.toggle('hidden', !(view === 'patrol' && S.patrol));
-  if (view === 'reports') loadReports();
-  if (view === 'users') loadUsers();
-  if (view === 'logs') loadLogs();
-}
-
-function enterApp(){
-  store.set('rsfc_token', S.token);
-  $('#topbar').classList.remove('hidden');
-  $('#who').textContent = S.user.nama + ' · ' + (ROLE_LABEL[S.user.role] || S.user.role);
-  const tabs = [];
-  if (can('patroli')) tabs.push(['patrol','Patroli']);
-  if (can('laporan')) tabs.push(['reports','Laporan']);
-  if (can('kelola_pengguna') || can('setujui')) tabs.push(['users','Pengguna']);
-  if (can('qr')) tabs.push(['qr','QR Code']);
-  if (can('log')) tabs.push(['logs','Log']);
-  $('#btn-print-rep').classList.toggle('hidden', !can('cetak_laporan'));
-  $('#f-user').classList.toggle('hidden', !can('kelola_pengguna'));
-  $('#btn-print-users').classList.toggle('hidden', !can('kelola_pengguna'));
-  const nav = $('#tabs');
-  nav.innerHTML = tabs.map(([v,l]) => `<button data-view="${v}">${l}</button>`).join('');
-  nav.classList.toggle('hidden', tabs.length < 2);
-  S.patrol = store.get('rsfc_patrol_' + S.user.username);
-  S.photoBusy = {}; S.photoVer = {};
-  restorePhotos();
-  show(tabs.length ? tabs[0][0] : 'none');
-  loadCheckpoints();
-}
-
-function forceLogout(msg){
-  closeCamera();
-  store.del('rsfc_token');
-  S.token = null; S.user = null;
-  $('#topbar').classList.add('hidden'); $('#tabs').classList.add('hidden');
-  show('login');
-  if (msg) toast(msg, 'bad');
-}
-
-/* ---------- login / daftar ---------- */
-document.addEventListener('click', e => {
-  const go = e.target.closest('[data-go]');
-  if (go){ $('#f-login').classList.toggle('hidden', go.dataset.go !== 'login'); $('#f-register').classList.toggle('hidden', go.dataset.go !== 'register'); }
-  const tab = e.target.closest('#tabs button');
-  if (tab) show(tab.dataset.view);
-});
-
-$('#f-login').addEventListener('submit', e => {
-  e.preventDefault();
-  withBusy(e.submitter, async () => {
-    try{
-      const r = await api('apiLogin', $('#l-user').value.trim(), $('#l-pass').value);
-      S.token = r.token; S.user = r.user; $('#l-pass').value = '';
-      enterApp();
-    }catch(err){ toast(err.message, 'bad'); }
+    r[fn].apply(r, args);
   });
-});
+}
+function saveTok(t){ try { if (t) sessionStorage.setItem('fbcf_t', t); else sessionStorage.removeItem('fbcf_t'); } catch (e) {} }
+function msg(el, text, type){ el.innerHTML = text ? '<div class="msg ' + (type || 'err') + '">' + esc(text) + '</div>' : ''; }
+function scorePill(s){ if (s == null) return '<span class="pill none">Belum</span>'; return '<span class="pill ' + (s >= 90 ? 'ok' : s >= 70 ? 'warn' : 'bad') + '">' + s + '%</span>'; }
 
-$('#f-register').addEventListener('submit', e => {
-  e.preventDefault();
-  withBusy(e.submitter, async () => {
-    try{
-      const msg = await api('apiRegister', $('#r-user').value.trim(), $('#r-nama').value.trim(), $('#r-pass').value);
-      e.target.reset(); toast(msg, 'ok');
-      $('#f-register').classList.add('hidden'); $('#f-login').classList.remove('hidden');
-    }catch(err){ toast(err.message, 'bad'); }
-  });
-});
-
-$('#btn-logout').addEventListener('click', async () => {
-  if (S.patrol && !confirm('Patroli yang belum dikirim tetap tersimpan di perangkat ini. Keluar sekarang?')) return;
-  try{ await api('apiLogout', S.token); }catch(e){}
-  forceLogout();
-});
-
-/* ---------- patroli ---------- */
-async function loadCheckpoints(){
-  try{
-    S.cps = await api('apiGetCheckpoints', S.token);
-    $('#cp-count').textContent = S.cps.length + ' titik cek siap. Tekan Mulai Patroli, lalu scan QR di setiap titik.';
-    $('#btn-start').disabled = !S.cps.length;
-    renderPatrol();
-  }catch(err){ $('#cp-count').textContent = 'Gagal memuat titik cek: ' + err.message; }
-}
-
-function savePatrol(){
-  if (S.patrol) store.set('rsfc_patrol_' + S.user.username, S.patrol);
-  else store.del('rsfc_patrol_' + S.user.username);
-}
-
-function groupCps(){
-  const groups = [], map = {};
-  S.cps.forEach(cp => {
-    // mendukung "30 Gatsu Barat" maupun "Lantai 30 Gatsu Barat" / "Lt. 30 Gatsu Barat"
-    const m = cp.match(/^(?:lantai|lt\.?|floor)?\s*(\d+[A-Za-z]?)\s+(.+)$/i) || cp.match(/^(\S+)\s+(.+)$/);
-    const key = m ? m[1] : cp, label = m ? m[2].trim() : cp;
-    if (!map[key]){ map[key] = { floor:key, items:[] }; groups.push(map[key]); }
-    map[key].items.push({ cp, label });
-  });
-  return groups;
-}
-
-function renderPatrol(){
-  const active = !!S.patrol;
-  $('#patrol-idle').classList.toggle('hidden', active);
-  $('#patrol-active').classList.toggle('hidden', !active);
-  $('#patrol-bar').classList.toggle('hidden', !(active && S.view === 'patrol'));
-  if (!active) return;
-  const scans = S.patrol.scans, done = Object.keys(scans).length, total = S.cps.length;
-  $('#m-nama').textContent = S.user.nama;
-  $('#m-tgl').textContent = fmtDate(S.patrol.start);
-  $('#m-jam').textContent = fmtTime(S.patrol.start);
-  $('#m-progress-text').textContent = done + ' / ' + total;
-  $('#m-progress').style.width = (total ? done / total * 100 : 0) + '%';
-  $('#btn-submit').textContent = 'Kirim (' + done + '/' + total + ')';
-  $('#cp-list').innerHTML = groupCps().map(g => {
-    const n = g.items.filter(i => scans[i.cp]).length;
-    const title = /^\d+$/.test(g.floor) ? 'Lantai ' + g.floor : g.floor;
-    return `<div class="floor"><div class="floor-head"><span>${esc(title)}</span><span class="muted">${n}/${g.items.length}</span></div>
-      <div class="chips">${g.items.map(i => scans[i.cp]
-        ? (can('foto')
-          ? `<button type="button" class="chip done" data-photo="${esc(i.cp)}">${chipThumb(i.cp)}✓ ${esc(i.label)}<small>${fmtTime(scans[i.cp])}</small>${chipPhoto(i.cp)}</button>`
-          : `<div class="chip done">✓ ${esc(i.label)}<small>${fmtTime(scans[i.cp])}</small></div>`)
-        : `<div class="chip">${esc(i.label)}<small>belum</small></div>`).join('')}</div></div>`;
-  }).join('');
-}
-
-function setLastScan(msg, type, photoCp){
-  const el = $('#last-scan');
-  el.innerHTML = esc(msg) + (photoCp && can('foto')
-    ? `<button type="button" class="btn accent" data-photo="${esc(photoCp)}">📷 ${hasPhoto(photoCp) ? 'Ganti foto' : 'Ambil foto'}</button>` : '');
-  el.className = 'last-scan ' + type;
-}
-
-function handleScan(text){
-  if (S.photoMode) return;                    // sedang memotret, abaikan QR
-  const now = Date.now();
-  if (text === S.lastText && now - S.lastAt < 3000) return;
-  S.lastText = text; S.lastAt = now;
-  if (!S.patrol) return;
-  const cp = S.cps.find(c => norm(c) === norm(text));
-  if (!cp){ setLastScan('QR tidak dikenali: "' + text + '"', 'bad'); toast('QR bukan titik cek yang terdaftar', 'bad'); return; }
-  if (S.patrol.scans[cp]){ setLastScan(cp + ' sudah di-scan jam ' + fmtTime(S.patrol.scans[cp]), 'warn', cp); return; }
-  S.patrol.scans[cp] = new Date().toISOString();
-  savePatrol(); beep();
-  setLastScan('✓ ' + cp + ' tercatat jam ' + fmtTime(S.patrol.scans[cp]), 'ok', cp);
-  renderPatrol();
-}
-
-/* ================= KAMERA =================
-   Kamera dibuka langsung lewat getUserMedia dan ditampilkan di <video>.
-   QR dibaca dengan BarcodeDetector bawaan Chrome; browser yang belum
-   mendukungnya (mis. iPhone) memakai jsQR. */
-const CAM_KEY = 'rsfc_cam';
-const BACK_RE = /back|rear|belakang|environment/i;
-const cam = { stream:null, video:null, timer:null, watch:null, busy:false, list:[], tried:new Set(), detector:null, canvas:null, label:'' };
-
-function camScanning(){ return !!cam.stream; }
-function camStatus(msg){
-  const el = $('#cam-status'); if (!el) return;
-  el.textContent = msg || ''; el.classList.toggle('hidden', !msg);
-}
-async function listCameras(){
-  try{
-    const devs = await navigator.mediaDevices.enumerateDevices();
-    cam.list = devs.filter(d => d.kind === 'videoinput')
-      .map((d,i) => ({ id:d.deviceId, label:d.label || ('Kamera ' + (i+1)) }));
-  }catch(e){ cam.list = []; }
-}
-function pickCamera(){
-  const saved = store.get(CAM_KEY);
-  if (saved && cam.list.some(c => c.id === saved)) return saved;
-  const back = cam.list.filter(c => BACK_RE.test(c.label));
-  const pool = back.length ? back : cam.list;
-  const main = pool.find(c => /camera2? 0\b/i.test(c.label));     // lensa utama Android
-  return (main || pool[0] || {}).id || null;
-}
-function fillCamSelect(currentId){
-  const sel = $('#cam-select');
-  sel.innerHTML = cam.list.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('');
-  if (currentId) sel.value = currentId;
-  $('#cam-row').classList.toggle('hidden', cam.list.length < 2);
-}
-/* rata-rata kecerahan frame (0–255); -1 jika tidak bisa diukur */
-function frameBrightness(v){
-  try{
-    const c = document.createElement('canvas'); c.width = 32; c.height = 24;
-    const x = c.getContext('2d'); x.drawImage(v, 0, 0, 32, 24);
-    const d = x.getImageData(0, 0, 32, 24).data; let s = 0;
-    for (let i = 0; i < d.length; i += 4) s += d[i] + d[i+1] + d[i+2];
-    return s / (d.length / 4 * 3);
-  }catch(e){ return -1; }
-}
-async function getDetector(){
-  if (cam.detector !== null) return cam.detector;
-  cam.detector = false;
-  try{
-    if ('BarcodeDetector' in window){
-      const f = await BarcodeDetector.getSupportedFormats();
-      if (f.includes('qr_code')) cam.detector = new BarcodeDetector({ formats:['qr_code'] });
-    }
-  }catch(e){}
-  return cam.detector;
-}
-function jsqrFrom(source, srcW, srcH, maxW){
-  if (typeof jsQR !== 'function' || !srcW) return null;
-  const s = Math.min(1, maxW / srcW), w = Math.round(srcW * s), h = Math.round(srcH * s);
-  const c = cam.canvas || (cam.canvas = document.createElement('canvas'));
-  c.width = w; c.height = h;
-  const x = c.getContext('2d', { willReadFrequently:true });
-  x.drawImage(source, 0, 0, w, h);
-  const r = jsQR(x.getImageData(0, 0, w, h).data, w, h, { inversionAttempts:'attemptBoth' });
-  return r && r.data ? r.data : null;
-}
-async function scanFrame(){
-  const v = cam.video;
-  if (!v || !cam.stream || v.readyState < 2 || !v.videoWidth) return;
-  try{
-    const det = await getDetector();
-    let text = null;
-    if (det){ const codes = await det.detect(v); if (codes.length) text = codes[0].rawValue; }
-    else text = jsqrFrom(v, v.videoWidth, v.videoHeight, 640);
-    if (text) handleScan(text);
-  }catch(e){}
-}
-/* 3,5 detik setelah kamera nyala: kalau tidak ada gambar / gambar hitam, coba lensa lain */
-function watchCamera(id){
-  clearTimeout(cam.watch);
-  cam.watch = setTimeout(() => {
-    const v = cam.video; if (!cam.stream || !v) return;
-    const b = v.videoWidth ? frameBrightness(v) : 0;
-    camStatus(cam.label + ' · ' + (v.videoWidth ? v.videoWidth + '×' + v.videoHeight : 'tidak ada gambar'));
-    if (v.videoWidth && (b < 0 || b >= 6)){ cam.tried.clear(); if (id) store.set(CAM_KEY, id); return; }
-    if (id) cam.tried.add(id);
-    const next = cam.list.find(c => !cam.tried.has(c.id) && BACK_RE.test(c.label)) || cam.list.find(c => !cam.tried.has(c.id));
-    if (next){ toast('Gambar gelap, mencoba kamera lain…'); openCamera(next.id); }
-    else { cam.tried.clear(); toast('Semua kamera sudah dicoba. Pilih kamera di daftar, atau pakai Foto QR.', 'bad'); }
-  }, 3500);
-}
-
-async function openCamera(camId){
-  if (cam.busy) return;                                   // cegah dibuka dua kali bersamaan
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    toast('Browser ini tidak mendukung kamera. Pakai tombol "Foto QR".', 'bad'); return;
+/* ---------- Login & Boot ---------- */
+function showLogin(note){
+  stopCam(); S.token = null; S.me = null; saveTok(null);
+  $('nav').classList.add('hide'); $('out').classList.add('hide'); $('who').textContent = '';
+  $('main').innerHTML = '<div class="card" style="max-width:380px;margin:30px auto"><h2>Masuk</h2>' +
+    '<label>ID user</label><input id="lu" autocapitalize="none" autocomplete="username">' +
+    '<label>PIN (6 digit)</label><input id="lp" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">' +
+    '<button class="btn block" style="margin-top:14px" id="lb">Masuk</button><button class="btn sec block" style="margin-top:8px" id="lr">Belum punya akun? Daftar</button><div id="lmsg">' + (note ? '<div class="msg info">' + esc(note) + '</div>' : '') + '</div></div>';
+  function doLogin(){
+    var b = $('lb'); b.disabled = true; b.textContent = 'Memeriksa…'; msg($('lmsg'), '');
+    call('login', $('lu').value, $('lp').value).then(function(r){ S.token = r.token; saveTok(r.token); start(r); })
+      .catch(function(e){ b.disabled = false; b.textContent = 'Masuk'; $('lp').value = ''; msg($('lmsg'), e.message); });
   }
-  cam.busy = true;
-  const btn = $('#btn-cam');
-  btn.disabled = true; btn.textContent = 'Membuka kamera…';
-  try{
-    closeCamera();                                        // bersihkan sesi sebelumnya
-    const size = { width:{ ideal:1280 }, height:{ ideal:720 } };
-    if (!cam.list.length) await listCameras();
-    const named = cam.list.some(c => c.id && !/^Kamera \d+$/.test(c.label));   // izin sudah pernah diberikan
-    let id = (typeof camId === 'string' && camId) || (named ? pickCamera() : null);
-    let stream;
-    try{
-      stream = await navigator.mediaDevices.getUserMedia({ audio:false,
-        video: id ? { deviceId:{ exact:id }, ...size } : { facingMode:{ ideal:'environment' }, ...size } });
-    }catch(err){
-      if (!id || /NotAllowed|Security/i.test(err.name)) throw err;
-      cam.tried.add(id);                                  // lensa ini gagal → biarkan browser memilih
-      stream = await navigator.mediaDevices.getUserMedia({ audio:false, video:{ facingMode:{ ideal:'environment' }, ...size } });
-    }
-    if (!cam.list.length || cam.list.every(c => /^Kamera \d+$/.test(c.label))) await listCameras(); // nama lensa baru ada setelah izin
-    const track = stream.getVideoTracks()[0];
-    const st = (track && track.getSettings) ? track.getSettings() : {};
-    id = st.deviceId || id;
-    cam.label = (cam.list.find(c => c.id === id) || {}).label || (track && track.label) || 'Kamera';
-
-    const v = document.createElement('video');
-    v.setAttribute('playsinline', ''); v.setAttribute('autoplay', ''); v.setAttribute('muted', '');
-    v.muted = true; v.playsInline = true;
-    v.srcObject = stream;
-    const r = $('#reader'); r.innerHTML = '';
-    const frame = document.createElement('div'); frame.className = 'scan-frame';
-    r.append(v, frame);
-    cam.stream = stream; cam.video = v;
-    try{ await v.play(); }catch(e){}
-    if (track) track.addEventListener('ended', () => {
-      if (cam.stream === stream){ closeCamera(); toast('Kamera terputus. Tekan Buka Kamera lagi.', 'bad'); }
-    });
-    let scanning = false;
-    cam.timer = setInterval(async () => {
-      if (scanning) return; scanning = true;
-      try{ await scanFrame(); } finally { scanning = false; }
-    }, 250);
-    btn.textContent = 'Tutup Kamera';
-    fillCamSelect(id);
-    camStatus(cam.label + ' · menyiapkan…');
-    v.addEventListener('playing', () => camStatus(cam.label + ' · ' + v.videoWidth + '×' + v.videoHeight), { once:true });
-    watchCamera(id);
-  }catch(err){
-    closeCamera();
-    const name = (err && err.name) || String(err);
-    if (/NotAllowed|Permission|Security/i.test(name)) toast('Izin kamera ditolak. Izinkan kamera untuk situs ini, lalu muat ulang.', 'bad');
-    else if (/NotFound|Overconstrained/i.test(name)) toast('Kamera belakang tidak ditemukan di perangkat ini.', 'bad');
-    else if (/NotReadable|Abort/i.test(name)) toast('Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.', 'bad');
-    else toast('Kamera tidak bisa dibuka (' + name + '). Pakai tombol "Foto QR".', 'bad');
-  }finally{
-    cam.busy = false; btn.disabled = false;
-    if (!cam.stream) btn.textContent = 'Buka Kamera';
-  }
-}
-function closeCamera(){
-  clearTimeout(cam.watch); clearInterval(cam.timer); cam.timer = null;
-  if (cam.stream) cam.stream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} });
-  if (cam.video){ try{ cam.video.srcObject = null; }catch(e){} }
-  cam.stream = null; cam.video = null;
-  const r = $('#reader'); if (r) r.innerHTML = '';
-  camStatus('');
-  if (!cam.busy) $('#btn-cam').textContent = 'Buka Kamera';
-}
-/* baca QR dari foto (tombol Foto QR) */
-async function decodeImageFile(file){
-  const bmp = await createImageBitmap(file);
-  const det = await getDetector();
-  if (det){
-    const codes = await det.detect(bmp);
-    if (codes.length) return codes[0].rawValue;
-  }
-  const text = jsqrFrom(bmp, bmp.width, bmp.height, 1200) || jsqrFrom(bmp, bmp.width, bmp.height, 700);
-  if (text) return text;
-  throw new Error('QR tidak ditemukan');
+  $('lb').onclick = doLogin;
+  $('lr').onclick = function(){ showRegister(); };
+  $('lp').onkeydown = function(e){ if (e.key === 'Enter') doLogin(); };
 }
 
-$('#btn-start').addEventListener('click', () => {
-  S.patrol = { start:new Date().toISOString(), scans:{}, photos:{}, thumbs:{} };
-  S.photoBusy = {}; S.photoVer = {};
-  savePatrol(); renderPatrol(); openCamera();
-});
-$('#btn-cam').addEventListener('click', () => camScanning() ? closeCamera() : openCamera());
-$('#cam-select').addEventListener('change', e => {
-  store.set(CAM_KEY, e.target.value); cam.tried.clear(); openCamera(e.target.value);
-});
-$('#file-qr').addEventListener('change', async e => {
-  const file = e.target.files[0]; e.target.value = '';
-  if (!file) return;
-  try{
-    handleScan(await decodeImageFile(file));
-  }catch(err){ toast('QR tidak terbaca di foto. Coba lebih dekat & terang.', 'bad'); }
-});
-$('#btn-cancel').addEventListener('click', () => {
-  if (!confirm('Batalkan patroli ini? Semua hasil scan akan dihapus.')) return;
-  closeCamera(); S.patrol = null; savePatrol(); setLastScan('', 'hidden'); clearPhotos(); renderPatrol();
-});
-$('#btn-submit').addEventListener('click', e => {
-  const done = Object.keys(S.patrol.scans).length, total = S.cps.length;
-  if (!done) return toast('Belum ada titik yang di-scan.', 'bad');
-  if (done < total && !confirm('Baru ' + done + ' dari ' + total + ' titik yang di-scan. Tetap kirim?')) return;
-  const btn = e.currentTarget;
-  withBusy(btn, async () => {
-    try{
-      btn.textContent = 'Mengunggah foto…';
-      const failed = await flushPhotos();
-      if (failed && !confirm(failed + ' foto belum terunggah. Tekan BATAL untuk menunggu dan mencoba lagi (foto tetap tersimpan di HP), atau OK untuk kirim tanpa foto tersebut (foto akan dihapus).')){ renderPatrol(); return; }
-      btn.textContent = 'Mengirim…';
-      const r = await api('apiSubmitPatrol', S.token, { start:S.patrol.start, scans:S.patrol.scans, photos:S.patrol.photos || {} });
-      closeCamera(); S.patrol = null; savePatrol(); $('#last-scan').className = 'last-scan hidden';
-      await clearPhotos();
-      renderPatrol();
-      toast('Terkirim ke spreadsheet (baris ' + r.row + ', ' + r.filled + '/' + r.total + ' titik' + (r.photos ? ', ' + r.photos + ' foto' : '') + ').', 'ok');
-    }catch(err){ renderPatrol(); toast('Gagal kirim: ' + err.message + ' — data tetap tersimpan, coba lagi.', 'bad'); }
-  });
-});
-
-/* ================= FOTO =================
-   Foto diambil dari kamera yang sedang terbuka (layar penuh), diperkecil
-   ke maks. 1280 px + cap lokasi/waktu/petugas, lalu langsung diunggah ke
-   Google Drive. Foto yang belum terunggah disimpan di IndexedDB dan
-   dicoba lagi otomatis (termasuk saat menekan Kirim). */
-const idb = {
-  db:null,
-  open(){
-    if (this.db) return Promise.resolve(this.db);
-    return new Promise((res, rej) => {
-      try{
-        const r = indexedDB.open('rsfc', 1);
-        r.onupgradeneeded = () => r.result.createObjectStore('photos');
-        r.onsuccess = () => { this.db = r.result; res(this.db); };
-        r.onerror = () => rej(r.error);
-      }catch(e){ rej(e); }
-    });
-  },
-  async run(mode, fn){
-    const db = await this.open();
-    return new Promise((res, rej) => {
-      const t = db.transaction('photos', mode);
-      const req = fn(t.objectStore('photos'));
-      t.oncomplete = () => res(req ? req.result : undefined);
-      t.onerror = () => rej(t.error);
-    });
-  }
-};
-const photoMem = new Map();                       // salinan di memori (cadangan jika IndexedDB tidak tersedia)
-const pKey = (user, cp) => user + '|' + cp;
-async function pendPut(v){ photoMem.set(pKey(v.user, v.cp), v); try{ await idb.run('readwrite', s => s.put(v, pKey(v.user, v.cp))); }catch(e){} }
-async function pendDel(user, cp){ photoMem.delete(pKey(user, cp)); try{ await idb.run('readwrite', s => s.delete(pKey(user, cp))); }catch(e){} }
-async function pendList(user){
-  const map = new Map();
-  try{ ((await idb.run('readonly', s => s.getAll())) || []).forEach(v => map.set(pKey(v.user, v.cp), v)); }catch(e){}
-  photoMem.forEach((v, k) => map.set(k, v));
-  return [...map.values()].filter(v => v.user === user);
-}
-
-function hasPhoto(cp){
-  return !!(S.patrol && ((S.patrol.photos && S.patrol.photos[cp]) || (S.patrol.thumbs && S.patrol.thumbs[cp])));
-}
-function chipThumb(cp){
-  const t = S.patrol && S.patrol.thumbs && S.patrol.thumbs[cp];
-  return t ? `<img class="chip-thumb" src="${t}" alt="">` : '';
-}
-function chipPhoto(cp){
-  const st = S.photoBusy[cp];
-  if (st === 'uploading') return '<span class="ph wait">⏳ mengunggah</span>';
-  if (st === 'pending') return '<span class="ph wait">⚠ foto belum terunggah</span>';
-  if (S.patrol && S.patrol.photos && S.patrol.photos[cp]) return '<span class="ph">📷 tersimpan</span>';
-  return '<span class="ph add">+ foto</span>';
-}
-
-/* gambar → JPEG yang diperkecil; stamp = teks cap di pojok bawah */
-function drawScaled(src, w, h, max, q, stamp){
-  const s = Math.min(1, max / Math.max(w, h));
-  const c = document.createElement('canvas');
-  c.width = Math.round(w * s); c.height = Math.round(h * s);
-  const x = c.getContext('2d');
-  x.drawImage(src, 0, 0, c.width, c.height);
-  if (stamp){
-    const fs = Math.max(14, Math.round(c.width / 42)), pad = Math.round(fs * 0.6);
-    x.font = `600 ${fs}px system-ui, sans-serif`;
-    const lines = stamp.split('\n');
-    const bh = lines.length * fs * 1.3 + pad * 1.4;
-    x.fillStyle = 'rgba(0,0,0,.55)'; x.fillRect(0, c.height - bh, c.width, bh);
-    x.fillStyle = '#fff'; x.textBaseline = 'top';
-    lines.forEach((l, i) => x.fillText(l, pad, c.height - bh + pad * 0.7 + i * fs * 1.3, c.width - pad * 2));
-  }
-  return c.toDataURL('image/jpeg', q);
-}
-function photoStamp(cp){
-  const d = new Date();
-  return cp + '\n' + d.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' }) + ' ' +
-    d.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) + ' · ' + (S.user ? S.user.nama : '');
-}
-
-async function uploadPhoto(v){
-  if (S.photoBusy[v.cp] === 'uploading') return null;     // versi terbaru akan diunggah setelah ini selesai
-  S.photoBusy[v.cp] = 'uploading'; renderPatrol();
-  let ok = false;
-  try{
-    const r = await api('apiUploadPhoto', S.token, { cp:v.cp, dataUrl:v.dataUrl, time:v.time });
-    if (S.photoVer[v.cp] === v.ver){
-      if (S.patrol && S.patrol.start === v.start){
-        S.patrol.photos = S.patrol.photos || {}; S.patrol.photos[v.cp] = r; savePatrol();
-      }
-      await pendDel(v.user, v.cp);
-    }
-    ok = true;
-  }catch(e){
-    const m = String(e && e.message || '');
-    if (/tidak dikenal/i.test(m)){
-      if (!S.photoOldWarned){ S.photoOldWarned = true; toast('Server belum diperbarui untuk foto. Admin: pasang Code.gs terbaru & deploy versi baru. Foto aman tersimpan di HP.', 'bad'); }
-    } else if (!S.photoErrWarned){ S.photoErrWarned = true; toast('Foto belum terunggah: ' + m + ' — akan dicoba lagi.', 'bad'); }
-  }
-  delete S.photoBusy[v.cp];
-  const latest = photoMem.get(pKey(v.user, v.cp));
-  if (latest && latest.ver !== v.ver) return uploadPhoto(latest);
-  if (!ok && photoMem.has(pKey(v.user, v.cp))) S.photoBusy[v.cp] = 'pending';
-  renderPatrol();
-  return ok;
-}
-
-async function savePhoto(cp, full, thumb){
-  if (!S.patrol || !S.patrol.scans[cp]) return;
-  S.patrol.thumbs = S.patrol.thumbs || {}; S.patrol.thumbs[cp] = thumb;
-  if (S.patrol.photos) delete S.patrol.photos[cp];
-  savePatrol();
-  const ver = Date.now() + Math.random();
-  S.photoVer[cp] = ver;
-  const v = { user:S.user.username, cp, dataUrl:full, time:new Date().toISOString(), start:S.patrol.start, ver };
-  await pendPut(v);
-  setLastScan('📷 Foto ' + cp + ' disimpan', 'ok', cp);
-  uploadPhoto(v);
-}
-
-/* unggah semua foto yang tertunda; hasil = jumlah yang masih gagal */
-async function flushPhotos(){
-  if (!S.patrol) return 0;
-  const list = await pendList(S.user.username);
-  let failed = 0;
-  for (const v of list){
-    if (v.start !== S.patrol.start){ await pendDel(v.user, v.cp); continue; }
-    if (!photoMem.has(pKey(v.user, v.cp))){ photoMem.set(pKey(v.user, v.cp), v); S.photoVer[v.cp] = v.ver; }
-    while (S.photoBusy[v.cp] === 'uploading') await new Promise(r => setTimeout(r, 300));
-    const cur = photoMem.get(pKey(v.user, v.cp));
-    if (!cur) continue;                                   // sudah terunggah selama menunggu
-    if (!(await uploadPhoto(cur))) failed++;
-  }
-  return failed;
-}
-async function clearPhotos(){
-  if (!S.user) return;
-  for (const v of await pendList(S.user.username)) await pendDel(v.user, v.cp);
-  S.photoBusy = {}; S.photoVer = {};
-}
-/* setelah login / buka ulang halaman: lanjutkan unggahan yang tertunda */
-async function restorePhotos(){
-  const user = S.user && S.user.username; if (!user) return;
-  const list = await pendList(user);
-  const keep = [];
-  for (const v of list){
-    if (!S.patrol || v.start !== S.patrol.start){ await pendDel(v.user, v.cp); continue; }
-    photoMem.set(pKey(v.user, v.cp), v); S.photoVer[v.cp] = v.ver; S.photoBusy[v.cp] = 'pending'; keep.push(v);
-  }
-  renderPatrol();
-  for (const v of keep){ delete S.photoBusy[v.cp]; await uploadPhoto(v); }
-}
-
-/* coba unggah ulang foto tertunda: tiap 30 detik & saat aplikasi dibuka kembali */
-async function retryPendingPhotos(){
-  if (!S.patrol || !S.user) return;
-  for (const [k, v] of photoMem){
-    if (v.user !== S.user.username || v.start !== S.patrol.start) continue;
-    if (S.photoBusy[v.cp] === 'pending'){ delete S.photoBusy[v.cp]; await uploadPhoto(v); }
-  }
-}
-setInterval(retryPendingPhotos, 30000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') retryPendingPhotos(); });
-window.addEventListener('online', retryPendingPhotos);
-
-/* ---- layar foto ---- */
-function showReview(on){
-  $('#pm-live').classList.toggle('hidden', on);
-  $('#pm-review').classList.toggle('hidden', !on);
-  $('#pm-img').classList.toggle('hidden', !on);
-  $('#pm-video').classList.toggle('hidden', on);
-}
-async function openPhoto(cp){
-  if (!S.patrol || !S.patrol.scans[cp]) return;
-  S.photoCp = cp;
-  const noLive = !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia;
-  if (noLive || S.forceNative){ nativePhoto(); return; }   // harus langsung (masih dalam ketukan pengguna)
-  if (!cam.stream) await openCamera();
-  if (!cam.stream){
-    S.forceNative = true;
-    toast('Kamera tidak bisa dibuka di sini. Ketuk 📷 lagi untuk memakai aplikasi kamera HP.', 'bad');
-    return;
-  }
-  S.photoMode = true; S.shot = null;
-  $('#pm-title').textContent = cp;
-  const v = $('#pm-video'); v.srcObject = cam.stream;
-  showReview(false);
-  $('#pm').classList.remove('hidden'); document.body.style.overflow = 'hidden';
-  try{ await v.play(); }catch(e){}
-}
-function closePhoto(){
-  S.photoMode = false; S.shot = null;
-  $('#pm').classList.add('hidden'); document.body.style.overflow = '';
-  const v = $('#pm-video'); try{ v.srcObject = null; }catch(e){}
-}
-/* pakai aplikasi kamera bawaan HP (kualitas penuh / cadangan) */
-function nativePhoto(){
-  S.reopenCam = camScanning();
-  closePhoto();
-  if (S.reopenCam) closeCamera();                       // lepaskan kamera agar aplikasi kamera HP bisa memakainya
-  const inp = $('#file-photo'); inp.value = '';
-  inp.click();
-  window.addEventListener('focus', () => setTimeout(() => {
-    if (S.reopenCam && !camScanning() && !inp.files.length){ S.reopenCam = false; openCamera(); }
-  }, 1200), { once:true });
-}
-
-document.addEventListener('click', e => {
-  const b = e.target.closest('[data-photo]');
-  if (b && S.patrol && can('foto')) openPhoto(b.dataset.photo);
-});
-$('#pm-close').addEventListener('click', closePhoto);
-$('#pm-native').addEventListener('click', nativePhoto);
-$('#pm-shot').addEventListener('click', () => {
-  const v = $('#pm-video');
-  if (!v.videoWidth) return toast('Kamera belum siap, coba lagi.', 'bad');
-  const stamp = photoStamp(S.photoCp);
-  S.shot = {
-    full: drawScaled(v, v.videoWidth, v.videoHeight, 1280, 0.75, stamp),
-    thumb: drawScaled(v, v.videoWidth, v.videoHeight, 120, 0.6)
+function showRegister(){
+  $('main').innerHTML = '<div class="card" style="max-width:380px;margin:30px auto"><h2>Daftar akun</h2>' +
+    '<label>Nama lengkap</label><input id="rn" maxlength="40">' +
+    '<label>ID user (hanya huruf & angka, 3-20 karakter)</label><input id="ru" autocapitalize="none" maxlength="20">' +
+    '<label>PIN (6 digit angka)</label><input id="rp" type="password" inputmode="numeric" maxlength="6">' +
+    '<label>Ulangi PIN</label><input id="rp2" type="password" inputmode="numeric" maxlength="6">' +
+    '<button class="btn block" style="margin-top:14px" id="rb">Kirim pendaftaran</button>' +
+    '<button class="btn sec block" style="margin-top:8px" id="rx">Kembali ke login</button><div id="rmsg"></div></div>';
+  $('rx').onclick = function(){ showLogin(); };
+  $('rb').onclick = function(){
+    var m = $('rmsg');
+    if ($('rp').value !== $('rp2').value) return msg(m, 'PIN dan ulangi PIN tidak sama.');
+    var b = $('rb'); b.disabled = true; b.textContent = 'Mengirim…'; msg(m, '');
+    call('register', $('ru').value, $('rn').value, $('rp').value).then(function(){
+      $('main').innerHTML = '<div class="card" style="max-width:380px;margin:30px auto"><h2>Pendaftaran terkirim ✔</h2>' +
+        '<p>Akun Anda menunggu persetujuan admin. Setelah disetujui, login dengan ID dan PIN yang tadi Anda buat.</p>' +
+        '<button class="btn block" id="bk">Ke halaman login</button></div>';
+      $('bk').onclick = function(){ showLogin(); };
+    }).catch(function(e){ b.disabled = false; b.textContent = 'Kirim pendaftaran'; msg(m, e.message); });
   };
-  $('#pm-img').src = S.shot.full;
-  showReview(true);
-});
-$('#pm-retake').addEventListener('click', () => { S.shot = null; showReview(false); });
-$('#pm-use').addEventListener('click', () => {
-  if (S.shot) savePhoto(S.photoCp, S.shot.full, S.shot.thumb);
-  closePhoto();
-});
-$('#file-photo').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  const reopen = S.reopenCam; S.reopenCam = false;
-  if (file && S.photoCp){
-    try{
-      const bmp = await createImageBitmap(file);
-      await savePhoto(S.photoCp,
-        drawScaled(bmp, bmp.width, bmp.height, 1280, 0.75, photoStamp(S.photoCp)),
-        drawScaled(bmp, bmp.width, bmp.height, 120, 0.6));
-    }catch(err){ toast('Foto tidak bisa dibaca. Coba lagi.', 'bad'); }
+}
+
+function start(r){
+  S.me = r.user; S.checklist = r.checklist; $('appName').textContent = r.appName;
+  $('who').textContent = r.user.nama + ' · ' + r.user.role; $('out').classList.remove('hide');
+  $('out').onclick = function(){ call('logout').catch(function(){}).then(function(){ showLogin(); }); };
+  var tabs = [['scan','Scan & Isi']];
+  if (r.user.role !== 'petugas') tabs.push(['dash','Dashboard']);
+  if (r.user.role === 'admin') tabs.push(['loc','Lokasi & QR'], ['usr','User']);
+  $('nav').innerHTML = tabs.map(function(t){ return '<button data-t="' + t[0] + '">' + t[1] + '</button>'; }).join('');
+  $('nav').classList.remove('hide');
+  $('nav').onclick = function(e){ var t = e.target.getAttribute('data-t'); if (t) go(t); };
+  go(r.user.role === 'petugas' ? 'scan' : 'dash');
+  if (r.user.role === 'admin') call('adminList').then(function(a){ S.admin = a; badge(); }).catch(function(){});
+}
+function badge(){
+  var n = (S.admin ? S.admin.users : []).filter(function(u){ return u.aktif === 'PENDING'; }).length, b = document.querySelector('#nav [data-t="usr"]');
+  if (b) b.textContent = 'User' + (n ? ' (' + n + ' baru)' : '');
+}
+
+(function boot(){
+  var t = null; try { t = sessionStorage.getItem('fbcf_t'); } catch (e) {}
+  if (!t) return showLogin();
+  S.token = t;
+  call('getMe').then(function(r){ if (r.ok) start(r); else showLogin(); }).catch(function(){ showLogin(); });
+})();
+
+function go(t){
+  stopCam(); S.tab = t; $('main').onclick = null;
+  Array.prototype.forEach.call($('nav').children, function(b){ b.classList.toggle('on', b.getAttribute('data-t') === t); });
+  ({ scan: viewScan, dash: viewDash, loc: viewLoc, usr: viewUsr })[t]();
+}
+
+/* ---------- Scan & Form ---------- */
+var F = { token: null, items: [], photo: null, thumb: null, lat: '', lng: '' };
+
+function viewScan(){
+  F = { token: null, items: [], photo: null, thumb: null, lat: '', lng: '' };
+  $('main').innerHTML =
+    '<div class="card"><h2>1. Scan QR lokasi</h2>' +
+    '<video id="vid" class="hide" playsinline muted></video><canvas id="cv" class="hide"></canvas>' +
+    '<div class="row" style="margin-top:8px"><button class="btn" id="bCam">Buka kamera & scan</button>' +
+    '<button class="btn sec" id="bQrPhoto">Foto QR (jika kamera live tidak jalan)</button></div>' +
+    '<input type="file" id="fQr" accept="image/*" capture="environment" class="hide">' +
+    '<div id="scanMsg"></div></div><div id="formBox"></div>';
+  $('bCam').onclick = startCam;
+  $('bQrPhoto').onclick = function(){ $('fQr').click(); };
+  $('fQr').onchange = function(e){ if (e.target.files[0]) decodeFile(e.target.files[0]); e.target.value = ''; };
+}
+
+function startCam(){
+  var m = $('scanMsg');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return msg(m, 'Kamera live tidak tersedia di browser ini. Gunakan tombol "Foto QR".', 'info');
   }
-  e.target.value = '';
-  if (reopen) openCamera();
-});
-
-/* ---------- laporan ---------- */
-let repRows = [], repInit = false;
-function todayISO(){
-  const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-function isoToDMY(iso){ const p = iso.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
-function toMin(t){ const m = String(t||'').match(/^(\d{1,2})[:.](\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; }
-function durasi(a, b){
-  const x = toMin(a), y = toMin(b); if (x == null || y == null) return null;
-  let d = y - x; if (d < 0) d += 1440;
-  return d < 60 ? d + ' menit' : Math.floor(d/60) + ' jam ' + (d % 60) + ' menit';
-}
-function stat(label, val, cls){ return `<div class="stat ${cls||''}"><b>${val}</b><span>${label}</span></div>`; }
-
-function isoOffset(days){
-  const d = new Date(); d.setDate(d.getDate() + days);
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-function dmyToISO(s){ const m = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; }
-function setQuick(q){
-  const t = todayISO(); let f = '', to = '';
-  if (q === 'today'){ f = to = t; }
-  else if (q === 'yesterday'){ f = to = isoOffset(-1); }
-  else if (q === '7'){ f = isoOffset(-6); to = t; }
-  else if (q === '30'){ f = isoOffset(-29); to = t; }
-  else if (q === 'month'){ f = t.slice(0, 8) + '01'; to = t; }
-  $('#rep-from').value = f; $('#rep-to').value = to;
-  markQuick();
-}
-function markQuick(){
-  const f = $('#rep-from').value, to = $('#rep-to').value, t = todayISO();
-  const map = { today:[t,t], yesterday:[isoOffset(-1),isoOffset(-1)], '7':[isoOffset(-6),t], '30':[isoOffset(-29),t], month:[t.slice(0,8)+'01',t], all:['',''] };
-  document.querySelectorAll('#rep-quick button').forEach(b => {
-    const m = map[b.dataset.q]; b.classList.toggle('active', !!m && m[0] === f && m[1] === to);
-  });
-}
-function fmtRange(f, to){
-  const d = s => fmtDate(s + 'T00:00');
-  if (!f && !to) return 'Semua tanggal';
-  if (f && to && f === to) return d(f);
-  if (f && to) return d(f) + ' – ' + d(to);
-  return f ? 'Sejak ' + d(f) : 'Sampai ' + d(to);
-}
-
-let repSeq = 0, repTruncated = false;
-async function loadReports(){
-  if (!repInit){ setQuick('today'); repInit = true; }
-  let f = $('#rep-from').value, to = $('#rep-to').value;
-  if (f && to && f > to){ [f, to] = [to, f]; $('#rep-from').value = f; $('#rep-to').value = to; markQuick(); }
-  const nama = $('#rep-name').value;
-  const seq = ++repSeq;
-  $('#rep-list').innerHTML = '<div class="rep empty">Memuat laporan…</div>';
-  try{
-    let res;
-    try{ res = await api('apiReports', S.token, { from:f, to:to, nama:nama, limit:500 }); }
-    catch(err){
-      if (!S.token) throw err;                         // sesi habis → sudah diarahkan ke login
-      res = await api('apiReports', S.token, 300);     // server (Code.gs) versi lama: ambil 300 terakhir, saring di HP
-    }
-    if (seq !== repSeq) return;                       // ada permintaan yang lebih baru
-    let rows, names;
-    if (Array.isArray(res)){                          // server versi lama: saring di HP
-      rows = res.filter(r => { const k = dmyToISO(r.tanggal); return (!f || k >= f) && (!to || k <= to) && (!nama || r.nama === nama); });
-      names = [...new Set(res.map(r => r.nama).filter(Boolean))].sort();
-      repTruncated = false;
-    } else { rows = res.rows || []; names = res.names || []; repTruncated = !!res.truncated; }
-    repRows = rows;
-    const sel = $('#rep-name');
-    sel.innerHTML = '<option value="">Semua petugas</option>' + names.map(n => `<option>${esc(n)}</option>`).join('');
-    sel.value = names.includes(nama) ? nama : '';
-    renderReports();
-  }catch(err){ if (seq === repSeq) $('#rep-list').innerHTML = '<div class="rep empty">' + esc(err.message) + '</div>'; }
-}
-
-function renderReports(){
-  const f = $('#rep-from').value, to = $('#rep-to').value, n = $('#rep-name').value;
-  const rows = repRows;
-  const full = rows.filter(r => r.total && r.filled === r.total).length;
-  const avg = rows.length ? Math.round(rows.reduce((s,r) => s + (r.total ? r.filled / r.total : 0), 0) / rows.length * 100) : 0;
-  $('#rep-stats').innerHTML =
-    stat('Patroli', rows.length) + stat('Lengkap', full, 'ok') +
-    stat('Belum lengkap', rows.length - full, rows.length - full ? 'warn' : '') + stat('Rata-rata cakupan', avg + '%');
-  $('#rep-filter-text').textContent = 'Tanggal: ' + fmtRange(f, to) +
-    ' · Petugas: ' + (n || 'semua') + ' · Dicetak ' + new Date().toLocaleString('id-ID');
-  const note = repTruncated ? '<div class="rep-note">Ditampilkan 500 patroli terbaru. Persempit tanggal atau pilih petugas untuk melihat sisanya.</div>' : '';
-  $('#rep-list').innerHTML = note + (rows.length ? rows.map(repCard).join('')
-    : `<div class="rep empty">Tidak ada patroli untuk ${esc(fmtRange(f, to).toLowerCase())}${n ? ' oleh ' + esc(n) : ''}.</div>`);
-}
-
-
-function repCard(r){
-  const pct = r.total ? Math.round(r.filled / r.total * 100) : 0;
-  const full = r.total && r.filled === r.total;
-  const selesai = r.selesai ? String(r.selesai).slice(0,5) : '';
-  const dur = selesai ? durasi(r.jam, selesai) : null;
-  const nFoto = Object.keys(r.photos || {}).length;
-  const sub = [esc(r.tanggal), esc(r.jam) + (selesai ? '–' + esc(selesai) : ''), dur, nFoto ? nFoto + ' foto' : ''].filter(Boolean).join(' · ');
-  return `<div class="rep">
-    <div class="rep-top"><div><div class="rep-name">${esc(r.nama)}</div><div class="rep-sub">${sub}</div></div>
-      <span class="badge ${full ? 'b-aktif' : 'b-menunggu'}">${full ? 'Lengkap' : 'Kurang ' + (r.total - r.filled)}</span></div>
-    <div class="rep-bar"><div class="progress"><i class="${full ? '' : 'warn'}" style="width:${pct}%"></i></div>
-      <span class="rep-pct">${r.filled}/${r.total}</span></div>
-    ${photoLinks(r)}
-    <details><summary>Rincian per lantai</summary>${floorTable(r)}</details>
-  </div>`;
-}
-
-/* daftar foto (thumbnail + link) untuk satu patroli */
-function driveId(url){ const m = String(url).match(/\/d\/([\w-]+)|[?&]id=([\w-]+)/); return m ? (m[1] || m[2]) : ''; }
-function cpParts(cp){
-  const m = cp.match(/^(?:lantai|lt\.?|floor)?\s*(\d+[A-Za-z]?)\s+(.+)$/i);
-  return m ? { floor:'Lt ' + m[1], label:m[2].trim() } : { floor:'', label:cp };
-}
-function photoLinks(r){
-  const ph = r.photos || {}, keys = Object.keys(ph);
-  if (!keys.length) return '';
-  const order = S.cps.map(norm);
-  keys.sort((a,b) => { const x = order.indexOf(norm(a)), y = order.indexOf(norm(b)); return (x < 0 ? 999 : x) - (y < 0 ? 999 : y); });
-  const items = keys.map(k => {
-    const url = ph[k], id = driveId(url), p = cpParts(k), t = (r.times || {})[k];
-    const img = id ? `<img src="https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w320" alt="Foto ${esc(k)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=ph-ph>📷</div>'">`
-                   : '<div class="ph-ph">📷</div>';
-    return `<a class="pitem" href="${esc(url)}" target="_blank" rel="noopener">${img}
-      <span>${esc(p.floor ? p.floor + ' · ' + p.label : p.label)}${t ? '<small>' + esc(String(t).slice(0,5)) + '</small>' : ''}<em data-url="${esc(url)}">Buka foto ↗</em></span></a>`;
-  }).join('');
-  return `<div class="rep-photos"><div class="rep-photos-h">📷 Foto (${keys.length})</div><div class="pgrid">${items}</div></div>`;
-}
-
-function floorTable(r){
-  const miss = new Set((r.missing || []).map(norm));
-  const times = {}; Object.keys(r.times || {}).forEach(k => times[norm(k)] = r.times[k]);
-  const photos = {}; Object.keys(r.photos || {}).forEach(k => photos[norm(k)] = r.photos[k]);
-  const groups = groupCps();
-  if (!groups.length){
-    return r.missing && r.missing.length ? '<p class="muted">Belum di-scan: ' + r.missing.map(esc).join(', ') + '</p>' : '<p class="muted">Semua titik sudah di-scan.</p>';
-  }
-  const cols = [];
-  groups.forEach(g => g.items.forEach(i => { if (!cols.includes(i.label)) cols.push(i.label); }));
-  const head = '<tr><th>Lantai</th>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
-  const body = groups.map(g => {
-    const title = /^\d+$/.test(g.floor) ? g.floor : esc(g.floor);
-    return `<tr><td>${title}</td>` + cols.map(c => {
-      const it = g.items.find(i => i.label === c);
-      if (!it) return '<td class="muted">–</td>';
-      if (miss.has(norm(it.cp))) return '<td class="n">✗</td>';
-      const t = times[norm(it.cp)], ph = photos[norm(it.cp)];
-      const mark = ph ? `<a class="ph-link" href="${esc(ph)}" target="_blank" rel="noopener" title="Lihat foto">✓ 📷</a>` : '✓';
-      return `<td class="y">${mark}${t ? '<small>' + esc(String(t).slice(0,5)) + '</small>' : ''}</td>`;
-    }).join('') + '</tr>';
-  }).join('');
-  const legend = Object.keys(photos).length ? '<p class="muted" style="margin:6px 0 0">📷 = ada foto, ketuk untuk membuka.</p>' : '';
-  return `<div class="fgrid-wrap"><table class="fgrid"><thead>${head}</thead><tbody>${body}</tbody></table></div>${legend}`;
-}
-
-$('#btn-reload-rep').addEventListener('click', loadReports);
-$('#rep-from').addEventListener('change', () => { markQuick(); loadReports(); });
-$('#rep-to').addEventListener('change', () => { markQuick(); loadReports(); });
-$('#rep-name').addEventListener('change', loadReports);
-$('#rep-quick').addEventListener('click', e => {
-  const b = e.target.closest('button[data-q]'); if (!b) return;
-  setQuick(b.dataset.q); loadReports();
-});
-$('#btn-print-rep').addEventListener('click', () => {
-  document.querySelectorAll('#rep-list details').forEach(d => d.open = true);
-  setTimeout(() => window.print(), 200);
-});
-
-/* ---------- pengguna ---------- */
-let usersCache = [];
-async function loadUsers(){
-  const tb = $('#u-tbody'); tb.innerHTML = '<div class="empty-row">Memuat…</div>';
-  try{
-    usersCache = await api('apiListUsers', S.token);
-    const order = { menunggu:0, aktif:1, nonaktif:2 };
-    usersCache.sort((a,b) => (order[norm(a.status)] ?? 3) - (order[norm(b.status)] ?? 3));
-    tb.innerHTML = usersCache.map(u => {
-      const st = norm(u.status);
-      const acts = (st === 'menunggu' && (can('setujui') || can('kelola_pengguna')) ? `<button class="btn ok sm" data-act="approve" data-u="${esc(u.username)}">Setujui</button>` : '') +
-        (can('kelola_pengguna') ? `<button class="btn sm" data-act="edit" data-u="${esc(u.username)}">Ubah</button>
-          <button class="btn danger sm" data-act="del" data-u="${esc(u.username)}">Hapus</button>` : '');
-      return `<div class="urow">
-        <div class="urow-top"><div><b>${esc(u.nama)}</b><div class="muted">${esc(u.username)}</div></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-            <span class="badge b-role">${esc(ROLE_LABEL[u.role] || u.role)}</span><span class="badge b-${esc(st)}">${esc(u.status)}</span></div></div>
-        <div class="perm-list">Akses: ${esc(permNames(userPerms(u)))}${u.aksesKhusus ? ' · <i>diatur khusus</i>' : ''}</div>
-        ${acts ? `<div class="urow-acts">${acts}</div>` : ''}
-      </div>`;
-    }).join('') || '<div class="empty-row">Belum ada pengguna.</div>';
-  }catch(err){ tb.innerHTML = '<div class="empty-row">' + esc(err.message) + '</div>'; }
-}
-
-function renderPermBoxes(list){
-  $('#u-perms').innerHTML = PERM_LIST.map(([k, label]) =>
-    `<label><input type="checkbox" value="${k}"${list.includes(k) ? ' checked' : ''}> ${esc(label)}</label>`).join('');
-}
-function selectedPerms(){ return [...document.querySelectorAll('#u-perms input:checked')].map(i => i.value); }
-function resetUserForm(){
-  $('#f-user').reset(); $('#u-username').readOnly = false;
-  $('#u-title').textContent = 'Tambah pengguna'; $('#u-pass-label').textContent = 'Password';
-  renderPermBoxes(ROLE_PERMS[$('#u-role').value] || []);
-}
-renderPermBoxes(ROLE_PERMS.petugas);
-$('#u-role').addEventListener('change', e => renderPermBoxes(ROLE_PERMS[e.target.value] || []));
-$('#btn-u-reset').addEventListener('click', resetUserForm);
-$('#btn-reload-users').addEventListener('click', loadUsers);
-
-/* cetak daftar pengguna (tanpa password) */
-function buildUserPrint(){
-  const rank = { admin:0, supervisor:1, petugas:2 };
-  const list = usersCache.slice().sort((a,b) =>
-    (rank[a.role] ?? 9) - (rank[b.role] ?? 9) || String(a.nama).localeCompare(String(b.nama), 'id'));
-  const count = st => list.filter(u => norm(u.status) === st).length;
-  const byRole = r => list.filter(u => u.role === r).length;
-  $('#u-print').innerHTML = `
-    <div class="up-head"><h1>Daftar Pengguna — Room Service Floor Check</h1>
-      <div>Dicetak ${esc(new Date().toLocaleString('id-ID'))}<br>oleh ${esc(S.user ? S.user.nama : '')}</div></div>
-    <p class="up-sum">Total ${list.length} pengguna · Aktif ${count('aktif')} · Menunggu ${count('menunggu')} · Nonaktif ${count('nonaktif')}
-      &nbsp;|&nbsp; Admin ${byRole('admin')} · Supervisor ${byRole('supervisor')} · Petugas ${byRole('petugas')}</p>
-    <table class="up-table"><thead><tr><th class="c">No</th><th>Nama</th><th>Username</th><th>Role</th><th>Hak akses</th><th>Status</th><th>Terdaftar</th></tr></thead>
-    <tbody>${list.map((u,i) => `<tr><td class="c">${i+1}</td><td>${esc(u.nama)}</td><td>${esc(u.username)}</td>
-      <td>${esc(ROLE_LABEL[u.role] || u.role)}</td><td>${esc(permNames(userPerms(u)))}</td><td>${esc(u.status)}</td><td>${esc(u.dibuat || '')}</td></tr>`).join('')
-      || '<tr><td colspan="7">Belum ada pengguna.</td></tr>'}</tbody></table>`;
-}
-$('#btn-print-users').addEventListener('click', async e => {
-  if (!usersCache.length){ await withBusy(e.currentTarget, loadUsers); }
-  if (!usersCache.length) return toast('Daftar pengguna belum termuat.', 'bad');
-  buildUserPrint();
-  setTimeout(() => window.print(), 200);
-});
-
-$('#u-tbody').addEventListener('click', async e => {
-  const b = e.target.closest('button[data-act]'); if (!b) return;
-  const u = usersCache.find(x => x.username === b.dataset.u); if (!u) return;
-  if (b.dataset.act === 'edit'){
-    $('#u-username').value = u.username; $('#u-username').readOnly = true;
-    $('#u-nama').value = u.nama; $('#u-role').value = u.role; $('#u-status').value = u.status || 'Aktif';
-    renderPermBoxes(userPerms(u));
-    $('#u-password').value = ''; $('#u-title').textContent = 'Ubah pengguna';
-    $('#u-pass-label').textContent = 'Password baru (kosongkan jika tidak diganti)';
-    window.scrollTo({ top:0, behavior:'smooth' });
-    return;
-  }
-  await withBusy(b, async () => {
-    try{
-      let msg;
-      if (b.dataset.act === 'approve'){
-        try{ msg = await api('apiApproveUser', S.token, u.username); }
-        catch(err){
-          if (!/tidak dikenal/i.test(err.message)) throw err;
-          msg = await api('apiSaveUser', S.token, { username:u.username, nama:u.nama, role:u.role, status:'Aktif' });   // Code.gs lama
-        }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(st){
+    S.stream = st; var v = $('vid'); v.srcObject = st; v.classList.remove('hide'); v.play(); msg(m, 'Arahkan kamera ke QR…', 'info');
+    var c = $('cv'), ctx = c.getContext('2d');
+    (function tick(){
+      if (!S.stream) return;
+      if (v.readyState === v.HAVE_ENOUGH_DATA){
+        c.width = v.videoWidth; c.height = v.videoHeight; ctx.drawImage(v, 0, 0);
+        var d = ctx.getImageData(0, 0, c.width, c.height), q = jsQR(d.data, d.width, d.height);
+        if (q && q.data){ stopCam(); return onQr(q.data); }
       }
-      if (b.dataset.act === 'del'){ if (!confirm('Hapus pengguna ' + u.username + '?')) return; msg = await api('apiDeleteUser', S.token, u.username); }
-      toast(msg, 'ok'); loadUsers();
-    }catch(err){ toast(err.message, 'bad'); }
+      S.raf = requestAnimationFrame(tick);
+    })();
+  }).catch(function(){
+    msg(m, 'Kamera live diblokir (umum terjadi di web app Apps Script). Gunakan tombol "Foto QR".', 'info');
   });
-});
+}
+function stopCam(){
+  if (S.raf) cancelAnimationFrame(S.raf); S.raf = 0;
+  if (S.stream){ S.stream.getTracks().forEach(function(t){ t.stop(); }); S.stream = null; }
+  var v = $('vid'); if (v) v.classList.add('hide');
+}
 
-$('#f-user').addEventListener('submit', e => {
-  e.preventDefault();
-  withBusy(e.submitter, async () => {
-    try{
-      const msg = await api('apiSaveUser', S.token, {
-        username:$('#u-username').value.trim(), nama:$('#u-nama').value.trim(),
-        role:$('#u-role').value, status:$('#u-status').value, password:$('#u-password').value,
-        akses:selectedPerms()
-      });
-      toast(msg, 'ok'); resetUserForm(); loadUsers();
-    }catch(err){ toast(err.message, 'bad'); }
-  });
-});
-
-/* ---------- log aktivitas ---------- */
-let logSeq = 0, logInit = false;
-function logRange(q){
-  const t = todayISO();
-  const m = { today:[t,t], yesterday:[isoOffset(-1),isoOffset(-1)], '7':[isoOffset(-6),t], '30':[isoOffset(-29),t], all:['',''] };
-  return m[q];
-}
-function markLogQuick(){
-  const f = $('#log-from').value, to = $('#log-to').value;
-  document.querySelectorAll('#log-quick button').forEach(b => { const m = logRange(b.dataset.q); b.classList.toggle('active', m[0] === f && m[1] === to); });
-}
-function logBadge(a){
-  const k = norm(a);
-  const cls = /gagal|hapus|dicabut/.test(k) ? 'bad' : /login$|setujui|tambah|kirim/.test(k) ? 'ok' : /ubah|daftar/.test(k) ? 'warn' : '';
-  return `<span class="lbadge ${cls}">${esc(a)}</span>`;
-}
-function linkify(s){
-  return esc(s).replace(/https:\/\/drive\.google\.com\/[\w\/?=&.-]+/g, u => `<a href="${u}" target="_blank" rel="noopener">buka foto ↗</a>`);
-}
-async function loadLogs(){
-  if (!logInit){ const r = logRange('today'); $('#log-from').value = r[0]; $('#log-to').value = r[1]; logInit = true; }
-  markLogQuick();
-  let f = $('#log-from').value, to = $('#log-to').value;
-  if (f && to && f > to){ [f, to] = [to, f]; $('#log-from').value = f; $('#log-to').value = to; markLogQuick(); }
-  const nama = $('#log-name').value, aksi = $('#log-act').value;
-  const seq = ++logSeq, box = $('#log-list');
-  box.innerHTML = '<p class="muted">Memuat log…</p>';
-  try{
-    const res = await api('apiLogs', S.token, { from:f, to:to, nama:nama, aksi:aksi, limit:500 });
-    if (seq !== logSeq) return;
-    const fill = (sel, list, cur, all) => {
-      sel.innerHTML = `<option value="">${all}</option>` + list.map(x => `<option>${esc(x)}</option>`).join('');
-      sel.value = list.includes(cur) ? cur : '';
+function loadImg(file, max){
+  return new Promise(function(res, rej){
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function(){
+      var k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); res(c);
     };
-    fill($('#log-name'), res.names || [], nama, 'Semua pengguna');
-    fill($('#log-act'), res.actions || [], aksi, 'Semua aktivitas');
-    $('#log-filter-text').textContent = 'Tanggal: ' + fmtRange(f, to) + ' · Pengguna: ' + (nama || 'semua') +
-      ' · Aktivitas: ' + (aksi || 'semua') + ' · Dicetak ' + new Date().toLocaleString('id-ID');
-    const rows = res.rows || [];
-    if (!rows.length){ box.innerHTML = '<p class="muted" style="text-align:center;padding:16px 0">Tidak ada aktivitas untuk filter ini.</p>'; return; }
-    let day = '', html = '';
-    rows.forEach(r => {
-      const d = r.waktu.slice(0, 10);
-      if (d !== day){ day = d; html += `<div class="lday">${esc(fmtDate(dmyToISO(d) + 'T00:00'))}</div>`; }
-      html += `<div class="lrow"><time>${esc(r.waktu.slice(11, 19))}</time>
-        <div><span class="who">${esc(r.nama || r.username || '—')}</span>${logBadge(r.aksi)}</div>
-        ${r.detail ? `<div class="det">${linkify(r.detail)}</div>` : ''}</div>`;
-    });
-    if (res.truncated) html += '<p class="rep-note">Ditampilkan 500 aktivitas terbaru. Persempit tanggal atau filter untuk melihat sisanya.</p>';
-    box.innerHTML = html;
-  }catch(err){
-    if (seq !== logSeq) return;
-    box.innerHTML = '<p class="muted">' + esc(/tidak dikenal/i.test(err.message)
-      ? 'Fitur log belum aktif di server. Admin: pasang Code.gs terbaru lalu Deploy → Manage deployments → New version.'
-      : err.message) + '</p>';
-  }
-}
-$('#log-quick').addEventListener('click', e => {
-  const b = e.target.closest('button[data-q]'); if (!b) return;
-  const r = logRange(b.dataset.q); $('#log-from').value = r[0]; $('#log-to').value = r[1]; loadLogs();
-});
-['#log-from', '#log-to', '#log-name', '#log-act'].forEach(s => $(s).addEventListener('change', loadLogs));
-$('#btn-reload-log').addEventListener('click', loadLogs);
-$('#btn-print-log').addEventListener('click', () => setTimeout(() => window.print(), 100));
-
-/* ---------- QR code ---------- */
-$('#btn-qr-gen').addEventListener('click', () => {
-  const grid = $('#qr-grid'); grid.innerHTML = '';
-  if (!S.cps.length) return toast('Titik cek belum dimuat.', 'bad');
-  S.cps.forEach(cp => {
-    const card = document.createElement('div'); card.className = 'qr-card';
-    const q = document.createElement('div'); q.className = 'qr';
-    const label = document.createElement('b'); label.textContent = cp;
-    card.append(q, label); grid.append(card);
-    new QRCode(q, { text:cp, width:260, height:260, correctLevel:QRCode.CorrectLevel.M });
+    img.onerror = function(){ rej(new Error('Gambar tidak bisa dibaca')); }; img.src = url;
   });
-});
-$('#btn-qr-print').addEventListener('click', () => {
-  if (!$('#qr-grid').children.length) $('#btn-qr-gen').click();
-  setTimeout(() => window.print(), 400);
-});
+}
+function decodeFile(file){
+  loadImg(file, 1200).then(function(c){
+    var d = c.getContext('2d').getImageData(0, 0, c.width, c.height), q = jsQR(d.data, d.width, d.height);
+    if (q && q.data) onQr(q.data); else msg($('scanMsg'), 'QR tidak terbaca. Foto lebih dekat & pastikan tidak buram, lalu coba lagi.', 'err');
+  }).catch(function(e){ msg($('scanMsg'), e.message, 'err'); });
+}
 
-/* ---------- start ---------- */
-window.addEventListener('load', async () => {
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(API_URL)){
-    show('login');
-    toast('API_URL belum diisi. Edit index.html dan tempel Web app URL Apps Script.', 'bad');
-    return;
-  }
-  const t = store.get('rsfc_token');
-  if (t){
-    S.token = t;
-    try{ S.user = await api('apiMe', t); enterApp(); return; }catch(e){}
-  }
-  forceLogout();
-});
+function onQr(text){
+  if (text.indexOf('FBCF:') !== 0) return msg($('scanMsg'), 'Ini bukan QR FB Cek Floor.', 'err');
+  F.token = text; msg($('scanMsg'), 'QR terbaca ✔', 'good');
+  if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(p){ F.lat = p.coords.latitude; F.lng = p.coords.longitude; }, function(){}, { timeout: 8000 });
+  F.items = S.checklist.map(function(){ return null; });
+  renderForm();
+}
+
+function renderForm(){
+  $('formBox').innerHTML =
+    '<div class="card"><h2>2. Checklist floor</h2>' +
+    S.checklist.map(function(n, i){
+      return '<div class="chk"><span>' + esc(n) + '</span><div class="tog" data-i="' + i + '">' +
+        '<button class="y" data-v="1">OK</button><button class="n" data-v="0">Tidak</button></div></div>';
+    }).join('') +
+    '<label>Catatan (opsional)</label><textarea id="note" rows="2" maxlength="500"></textarea></div>' +
+    '<div class="card"><h2>3. Foto lokasi</h2>' +
+    '<button class="btn sec block" id="bPhoto">Ambil foto</button>' +
+    '<input type="file" id="fPhoto" accept="image/*" capture="environment" class="hide">' +
+    '<img id="prev" class="prev hide"></div>' +
+    '<button class="btn block" id="bSend">Kirim laporan</button><div id="sendMsg"></div>';
+  document.querySelectorAll('.tog').forEach(function(t){
+    t.onclick = function(e){
+      var v = e.target.getAttribute('data-v'); if (v == null) return;
+      F.items[+t.getAttribute('data-i')] = v === '1';
+      t.querySelector('.y').classList.toggle('on', v === '1'); t.querySelector('.n').classList.toggle('on', v === '0');
+    };
+  });
+  $('bPhoto').onclick = function(){ $('fPhoto').click(); };
+  $('fPhoto').onchange = function(e){
+    var f = e.target.files[0]; if (!f) return;
+    Promise.all([loadImg(f, 1280), loadImg(f, 200)]).then(function(cs){ F.photo = cs[0].toDataURL('image/jpeg', 0.72); F.thumb = cs[1].toDataURL('image/jpeg', 0.6); var p = $('prev'); p.src = F.photo; p.classList.remove('hide'); })
+      .catch(function(er){ msg($('sendMsg'), er.message, 'err'); });
+  };
+  $('bSend').onclick = send;
+  $('formBox').scrollIntoView({ behavior: 'smooth' });
+}
+
+function send(){
+  var m = $('sendMsg');
+  if (F.items.some(function(x){ return x === null; })) return msg(m, 'Isi semua item checklist (OK / Tidak).', 'err');
+  if (!F.photo) return msg(m, 'Foto lokasi wajib diambil.', 'err');
+  var b = $('bSend'); b.disabled = true; b.textContent = 'Mengirim…'; msg(m, '');
+  call('submitCheck', { token: F.token, items: F.items, note: $('note').value, photo: F.photo, thumb: F.thumb, lat: F.lat, lng: F.lng })
+    .then(function(r){
+      $('main').innerHTML = '<div class="card"><h2>Laporan terkirim ✔</h2><p><b>' + esc(r.lokasi) + '</b> · skor ' + r.skor + '%</p>' +
+        '<button class="btn block" id="again">Scan lokasi berikutnya</button></div>';
+      $('again').onclick = viewScan;
+    }).catch(function(e){ b.disabled = false; b.textContent = 'Kirim laporan'; msg(m, e.message, 'err'); });
+}
+
+/* ---------- Dashboard ---------- */
+function viewDash(){
+  $('main').innerHTML = '<div class="card">Memuat dashboard…</div>';
+  call('getDashboard', S.days).then(function(d){ S.dash = d; renderDash(); })
+    .catch(function(e){ $('main').innerHTML = '<div class="card"><div class="msg err">' + esc(e.message) + '</div></div>'; });
+}
+function renderDash(){
+  var d = S.dash, k = d.kpi, max = Math.max.apply(null, d.trend.map(function(t){ return t.count; }).concat([1]));
+  $('main').innerHTML =
+    '<div class="row noprint" style="margin-bottom:10px"><select id="days">' +
+    [7, 14, 30].map(function(n){ return '<option value="' + n + '"' + (n === d.days ? ' selected' : '') + '>' + n + ' hari terakhir</option>'; }).join('') +
+    '</select><button class="btn sec" id="rf">Refresh</button></div>' +
+    '<div class="kpis">' +
+      '<div class="kpi"><span>Cek hari ini</span><b>' + k.today + '</b></div>' +
+      '<div class="kpi"><span>Lokasi sudah dicek</span><b>' + k.locChecked + '/' + k.locTotal + '</b></div>' +
+      '<div class="kpi"><span>Skor rata-rata hari ini</span><b>' + (k.avgToday == null ? '–' : k.avgToday + '%') + '</b></div>' +
+      '<div class="kpi"><span>Skor rata-rata periode</span><b>' + (k.avgPeriod == null ? '–' : k.avgPeriod + '%') + '</b></div></div>' +
+    '<div class="card"><h2>Jumlah cek per hari</h2><div class="bars">' +
+      d.trend.map(function(t){ return '<div title="' + t.count + ' cek, skor ' + (t.skor == null ? '-' : t.skor + '%') + '"><i style="height:' + Math.round(t.count / max * 80) + '%"></i>' + esc(t.tanggal) + '</div>'; }).join('') +
+    '</div></div>' +
+    '<div class="card"><h2>Status lokasi hari ini</h2><table><tr><th>Lokasi</th><th>Cek</th><th>Skor terakhir</th><th>Oleh</th></tr>' +
+      d.locStatus.map(function(l){ return '<tr><td>' + esc(l.nama) + '<br><small style="color:var(--mute)">' + esc(l.area) + '</small></td><td>' + l.count + 'x</td><td>' + scorePill(l.skor) + '</td><td>' + esc(l.petugas || '–') + (l.waktu ? '<br><small>' + l.waktu + '</small>' : '') + '</td></tr>'; }).join('') +
+    '</table></div>' +
+    '<div class="card"><h2>Item paling sering gagal</h2>' +
+      (d.topFail.length ? '<table>' + d.topFail.map(function(f){ return '<tr><td>' + esc(f.item) + '</td><td><span class="pill bad">' + f.n + 'x</span></td></tr>'; }).join('') + '</table>' : '<p style="color:var(--mute)">Belum ada data.</p>') + '</div>' +
+    '<div class="card"><h2>Laporan terbaru</h2><table>' +
+      d.recent.map(function(r){ return '<tr><td style="width:64px">' + (r.thumb ? '<img class="thumb" style="cursor:pointer" data-p="' + esc(r.foto_id) + '" src="' + esc(r.thumb) + '">' : '') + '</td><td>' + esc(r.lokasi) + '<br><small style="color:var(--mute)">' + esc(r.waktu) + ' · ' + esc(r.petugas) + '</small>' + (r.catatan ? '<br><small>' + esc(r.catatan) + '</small>' : '') + '</td><td>' + scorePill(r.skor) + '</td></tr>'; }).join('') +
+    '</table></div>';
+  $('days').onchange = function(){ S.days = +this.value; viewDash(); };
+  $('main').onclick = function(e){ var id = e.target.getAttribute && e.target.getAttribute('data-p'); if (id) openPhoto(id); };
+  $('rf').onclick = viewDash;
+}
+
+function openPhoto(id){
+  var m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = '<div class="card"><p id="pl">Memuat foto…</p><img id="pi" class="prev hide" style="max-height:70vh"><button class="btn sec block" style="margin-top:10px" id="pc">Tutup</button></div>';
+  document.body.appendChild(m); m.querySelector('#pc').onclick = function(){ m.remove(); };
+  call('getPhoto', id).then(function(src){ m.querySelector('#pl').remove(); var i = m.querySelector('#pi'); i.src = src; i.classList.remove('hide'); })
+    .catch(function(e){ m.querySelector('#pl').textContent = e.message; });
+}
+
+/* ---------- Admin: Lokasi ---------- */
+function loadAdmin(){ return call('adminList').then(function(a){ S.admin = a; }); }
+
+function viewLoc(){
+  $('main').innerHTML = '<div class="card">Memuat…</div>';
+  loadAdmin().then(renderLoc).catch(function(e){ $('main').innerHTML = '<div class="card"><div class="msg err">' + esc(e.message) + '</div></div>'; });
+}
+function renderLoc(){
+  $('main').innerHTML =
+    '<div class="card"><h2>Tambah lokasi</h2><div class="row"><input id="ln" placeholder="Nama lokasi (mis. Main Dining)"><input id="la" placeholder="Area (mis. Lantai 1)"></div>' +
+    '<button class="btn" style="margin-top:10px" id="addL">Tambah</button><div id="lm"></div></div>' +
+    '<div class="card"><h2>Daftar lokasi</h2><table><tr><th>ID</th><th>Lokasi</th><th>Status</th><th></th></tr>' +
+    S.admin.locations.map(function(l){
+      return '<tr><td>' + esc(l.id) + '</td><td>' + esc(l.nama) + '<br><small style="color:var(--mute)">' + esc(l.area) + '</small></td>' +
+        '<td><span class="pill ' + (l.aktif === 'YES' ? 'ok' : 'none') + '">' + (l.aktif === 'YES' ? 'Aktif' : 'Nonaktif') + '</span></td>' +
+        '<td style="white-space:nowrap"><button class="btn sm" data-a="qr" data-id="' + esc(l.id) + '">QR</button> ' +
+        '<button class="btn sm sec" data-a="tg" data-id="' + esc(l.id) + '">' + (l.aktif === 'YES' ? 'Nonaktifkan' : 'Aktifkan') + '</button></td></tr>';
+    }).join('') + '</table></div>';
+  $('addL').onclick = function(){
+    call('adminSaveLocation', { nama: $('ln').value, area: $('la').value }).then(function(a){ S.admin = a; renderLoc(); })
+      .catch(function(e){ msg($('lm'), e.message); });
+  };
+  $('main').querySelector('table:last-of-type').onclick = function(e){
+    var a = e.target.getAttribute('data-a'), id = e.target.getAttribute('data-id'); if (!a) return;
+    var l = S.admin.locations.filter(function(x){ return x.id === id; })[0];
+    if (a === 'qr') return showQr(l);
+    call('adminSaveLocation', { id: l.id, nama: l.nama, area: l.area, aktif: l.aktif === 'YES' ? 'NO' : 'YES' })
+      .then(function(r){ S.admin = r; renderLoc(); }).catch(function(er){ alert(er.message); });
+  };
+}
+function showQr(l){
+  var q = qrcode(0, 'M'); q.addData('FBCF:' + l.token); q.make();
+  var m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = '<div class="card"><h2>' + esc(l.nama) + '</h2><p style="margin:0;color:var(--mute)">' + esc(l.area) + ' · ' + esc(l.id) + '</p>' +
+    '<div class="qrbox">' + q.createSvgTag(6, 2) + '</div>' +
+    '<div class="row noprint"><button class="btn" id="pr">Cetak</button><button class="btn sec" id="rg">Ganti kode</button><button class="btn sec" id="cl">Tutup</button></div></div>';
+  document.body.appendChild(m);
+  m.querySelector('#cl').onclick = function(){ m.remove(); };
+  m.querySelector('#pr').onclick = function(){ window.print(); };
+  m.querySelector('#rg').onclick = function(){
+    if (!confirm('QR lama tidak akan berlaku lagi. Lanjutkan?')) return;
+    call('adminRegenerateToken', l.id).then(function(a){ S.admin = a; m.remove(); renderLoc(); }).catch(function(e){ alert(e.message); });
+  };
+}
+
+/* ---------- Admin: User ---------- */
+function viewUsr(){
+  $('main').innerHTML = '<div class="card">Memuat…</div>';
+  loadAdmin().then(renderUsr).catch(function(e){ $('main').innerHTML = '<div class="card"><div class="msg err">' + esc(e.message) + '</div></div>'; });
+}
+function renderUsr(){
+  badge();
+  var all = S.admin.users, pend = all.filter(function(u){ return u.aktif === 'PENDING'; }), rest = all.filter(function(u){ return u.aktif !== 'PENDING'; });
+  var roleOpts = ['petugas', 'supervisor', 'admin'].map(function(r){ return '<option>' + r + '</option>'; }).join('');
+  var pill = { YES: ['ok', 'Aktif'], NO: ['none', 'Nonaktif'], REJECTED: ['bad', 'Ditolak'] };
+  $('main').innerHTML =
+    (pend.length ? '<div class="card" style="border-color:var(--warn)"><h2>Menunggu persetujuan (' + pend.length + ')</h2><table>' +
+      pend.map(function(u){
+        return '<tr><td>' + esc(u.nama) + '<br><small style="color:var(--mute)">' + esc(u.username) + '</small></td>' +
+          '<td><select id="pr_' + esc(u.username) + '">' + roleOpts + '</select></td>' +
+          '<td style="white-space:nowrap"><button class="btn sm" data-a="ok" data-u="' + esc(u.username) + '">Setujui</button> ' +
+          '<button class="btn sm sec" data-a="no" data-u="' + esc(u.username) + '">Tolak</button></td></tr>';
+      }).join('') + '</table></div>' : '') +
+    '<div class="card"><h2>Tambah / ubah user</h2>' +
+    '<div class="row"><input id="uu" placeholder="ID user (mis. budi01)" autocapitalize="none"><input id="un" placeholder="Nama"></div>' +
+    '<div class="row" style="margin-top:8px"><select id="ur">' + roleOpts + '</select><input id="up" inputmode="numeric" maxlength="6" placeholder="PIN 6 digit"></div>' +
+    '<button class="btn" style="margin-top:10px" id="addU">Simpan</button><div id="um"></div>' +
+    '<p style="color:var(--mute);font-size:13px;margin:8px 0 0">ID user yang sudah ada = ubah data / reset PIN. Kosongkan PIN untuk tidak mengubahnya.</p></div>' +
+    '<div class="card"><h2>Daftar user</h2><table><tr><th>User</th><th>Role</th><th>Status</th><th></th></tr>' +
+    rest.map(function(u){
+      var p = pill[u.aktif] || ['none', esc(u.aktif)];
+      return '<tr><td>' + esc(u.nama) + '<br><small style="color:var(--mute)">' + esc(u.username) + '</small></td><td>' + esc(u.role) + '</td>' +
+        '<td><span class="pill ' + p[0] + '">' + p[1] + '</span></td>' +
+        '<td style="white-space:nowrap"><button class="btn sm sec" data-a="pin" data-u="' + esc(u.username) + '">Ubah PIN</button> ' +
+        '<button class="btn sm sec" data-a="tg" data-u="' + esc(u.username) + '">' + (u.aktif === 'YES' ? 'Cabut akses' : 'Aktifkan') + '</button></td></tr>';
+    }).join('') + '</table></div>';
+  $('addU').onclick = function(){
+    call('adminSaveUser', { username: $('uu').value, nama: $('un').value, role: $('ur').value, pin: $('up').value, aktif: 'YES' })
+      .then(function(a){ S.admin = a; renderUsr(); }).catch(function(e){ msg($('um'), e.message); });
+  };
+  $('main').onclick = function(e){
+    var a = e.target.getAttribute('data-a'), un = e.target.getAttribute('data-u'); if (!a) return;
+    var u = all.filter(function(x){ return x.username === un; })[0], req;
+    if (a === 'ok' || a === 'no'){
+      req = call('adminApproveUser', un, a === 'ok' ? $('pr_' + un).value : '', a === 'ok');
+    } else {
+      var p = { username: u.username, nama: u.nama, role: u.role, aktif: u.aktif };
+      if (a === 'pin'){ var np = prompt('PIN baru untuk ' + u.username + ' (6 digit):'); if (!np) return; p.pin = np; }
+      else p.aktif = u.aktif === 'YES' ? 'NO' : 'YES';
+      req = call('adminSaveUser', p);
+    }
+    req.then(function(r){ S.admin = r; renderUsr(); }).catch(function(er){ alert(er.message); });
+  };
+}
 </script>
 </body>
 </html>
