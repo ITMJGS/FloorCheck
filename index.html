@@ -252,7 +252,7 @@ function refreshPatrol(){
       g.items.map(function(i){
         var k = i.x.key, d = P.done[k];
         if (d) return '<div class="pt ok" data-k="' + esc(k) + '">' + (d.thumb ? '<img src="' + esc(d.thumb) + '">' : '') + '<b>✓ ' + esc(i.label) + '</b><small>' + hhmm(d.time) + '</small>' +
-          (d.photo ? '<small>' + (d.note ? 'ada catatan' : 'foto siap') + '</small>' : '<small class="warnx">⚠ foto belum diambil</small>') + '</div>';
+          '<small>' + (d.photo ? (d.note ? 'foto + catatan' : 'foto siap') : (d.note ? 'ada catatan' : 'tanpa foto')) + '</small></div>';
         if (P.sent[k]) return '<div class="pt sent"><b>✓ ' + esc(i.label) + '</b><small>terkirim ' + hhmm(P.sent[k]) + '</small></div>';
         return '<div class="pt todo"><b style="font-weight:600">' + esc(i.label) + '</b><small>belum</small></div>';
       }).join('') + '</div>';
@@ -300,7 +300,7 @@ function onScan(text){
   P.done[k] = it; if (!P.started) P.started = it.time;
   if (navigator.vibrate) navigator.vibrate(80);
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(p){ it.lat = p.coords.latitude; it.lng = p.coords.longitude; }, function(){}, { timeout: 8000, maximumAge: 60000 });
-  msg(m, '✔ ' + pt.nama + ' — ketuk kotak hijau untuk foto & catatan', 'good');
+  msg(m, '✔ ' + pt.nama + ' — ketuk kotak hijau jika ingin menambah foto atau catatan (opsional)', 'good');
   refreshPatrol();
 }
 
@@ -337,11 +337,6 @@ function cancelPatrol(){
 
 function sendAll(){
   var m = $('scanMsg'), keys = Object.keys(P.done);
-  var miss = keys.filter(function(k){ return !P.done[k].photo; });
-  if (miss.length){
-    msg(m, miss.length + ' titik belum ada foto: ' + miss.slice(0, 4).map(function(k){ return P.done[k].nama; }).join(', ') + (miss.length > 4 ? ', …' : '') + '. Ketuk kotak titik tersebut untuk mengambil foto.', 'err');
-    return window.scrollTo(0, 0);
-  }
   stopCam(); P.sending = true; refreshPatrol(); msg(m, '');
   var i = 0;
   (function next(){
