@@ -12,7 +12,11 @@
   header{background:#17304f;color:#fff;padding:14px 16px 10px;position:sticky;top:0;z-index:10}
   header .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
   header b{font-size:18px} header small{opacity:.75;display:block;font-size:13px}
-  header #out{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.55)}
+  header #out,header #bell{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.55)}
+  .topr{display:flex;gap:8px;align-items:center}
+  .toasts{position:fixed;top:10px;left:10px;right:10px;max-width:420px;margin-left:auto;z-index:60}
+  .toast{background:#17304f;color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;box-shadow:0 6px 20px rgba(0,0,0,.3);display:flex;gap:10px;align-items:center;cursor:pointer}
+  .toast small{opacity:.8}
   nav{display:flex;gap:6px;padding:12px 0 2px;overflow-x:auto}
   nav button{border:0;background:none;padding:9px 16px;border-radius:99px;font:inherit;color:rgba(255,255,255,.85);white-space:nowrap;cursor:pointer}
   nav button.on{background:#fff;color:#17304f;font-weight:600}
@@ -69,7 +73,7 @@
 </style>
 </head>
 <body>
-<header><div class="top"><div><b id="appName">FB Cek Floor</b><small id="who"></small></div><button class="btn sm sec hide" id="out">Keluar</button></div>
+<header><div class="top"><div><b id="appName">FB Cek Floor</b><small id="who"></small></div><div class="topr"><button class="btn sm sec hide" id="bell" title="Suara &amp; notifikasi">🔔</button><button class="btn sm sec hide" id="out">Keluar</button></div></div>
 <nav id="nav" class="hide"></nav></header>
 <main id="main"><div class="card">Memuat…</div></main>
 
@@ -116,7 +120,7 @@ function msg(el, text, type){ el.innerHTML = text ? '<div class="msg ' + (type |
 /* ---------- Login & Boot ---------- */
 function showLogin(note){
   stopCam(); S.token = null; S.me = null; saveTok(null);
-  $('nav').classList.add('hide'); $('out').classList.add('hide'); $('who').textContent = '';
+  stopWatch(); $('nav').classList.add('hide'); $('out').classList.add('hide'); $('bell').classList.add('hide'); $('who').textContent = '';
   $('main').innerHTML = '<div class="card" style="max-width:380px;margin:30px auto"><h2>Masuk</h2>' +
     '<label>ID user</label><input id="lu" autocapitalize="none" autocomplete="username">' +
     '<label>PIN (6 digit)</label><input id="lp" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">' +
@@ -164,8 +168,88 @@ function start(r){
   $('nav').classList.remove('hide');
   $('nav').onclick = function(e){ var t = e.target.getAttribute('data-t'); if (t) go(t); };
   go(r.user.role === 'petugas' ? 'scan' : 'dash');
-  if (r.user.role === 'admin') call('adminList').then(function(a){ S.admin = a; badge(); }).catch(function(){});
+  if (r.user.role === 'admin'){ call('adminList').then(function(a){ S.admin = a; badge(); }).catch(function(){}); startWatch(); } else stopWatch();
 }
+/* ---------- Notifikasi admin: bunyi + banner + notifikasi sistem ---------- */
+var W = { timer: 0, since: null, busy: false, ctx: null };
+function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch (e) {} }
+function sndOn(){ return lsGet('fbcf_snd') !== '0'; }
+function unlockAudio(){
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    if (!W.ctx) W.ctx = new AC(); if (W.ctx.state === 'suspended') W.ctx.resume();
+  } catch (e) {}
+}
+document.addEventListener('pointerdown', unlockAudio, true);
+document.addEventListener('keydown', unlockAudio, true);
+
+function beep(kind){
+  if (!sndOn()) return;
+  try {
+    unlockAudio(); var c = W.ctx; if (!c) return;
+    var notes = kind === 'daftar' ? [660, 880, 1175] : [880, 1175], t = c.currentTime;
+    notes.forEach(function(f, i){
+      var o = c.createOscillator(), g = c.createGain(), s = t + i * 0.18;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.3, s + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.16);
+      o.connect(g); g.connect(c.destination); o.start(s); o.stop(s + 0.18);
+    });
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate(kind === 'daftar' ? [120, 60, 120, 60, 120] : [150, 80, 150]);
+}
+
+function toast(ev){
+  var box = $('toasts');
+  if (!box){ box = document.createElement('div'); box.id = 'toasts'; box.className = 'toasts'; document.body.appendChild(box); }
+  var t = document.createElement('div'); t.className = 'toast';
+  t.innerHTML = '<span style="font-size:22px">' + (ev.tipe === 'daftar' ? '🆕' : '✅') + '</span><div><b>' + (ev.tipe === 'daftar' ? 'Pendaftar baru' : 'Patroli selesai') + '</b><br><small>' + esc(ev.pesan) + ' · ' + esc(ev.jam) + '</small></div>';
+  t.onclick = function(){ t.remove(); go(ev.tipe === 'daftar' ? 'usr' : 'dash'); };
+  box.appendChild(t); setTimeout(function(){ if (t.parentNode) t.remove(); }, 12000);
+}
+function osNotify(ev){
+  try {
+    if (window.Notification && Notification.permission === 'granted' && document.hidden)
+      new Notification(ev.tipe === 'daftar' ? 'Pendaftar baru' : 'Patroli selesai', { body: ev.pesan, tag: 'fbcf-' + ev.id });
+  } catch (e) {}
+}
+
+function pollEvents(){
+  if (W.busy || !S.me || S.me.role !== 'admin' || !S.token) return;
+  W.busy = true;
+  call('getAdminEvents', W.since).then(function(r){
+    W.busy = false;
+    if (W.since === null || r.latest < W.since){ W.since = r.latest; lsSet('fbcf_since_' + S.me.username, String(r.latest)); }
+    else if (r.events.length){
+      W.since = r.latest; lsSet('fbcf_since_' + S.me.username, String(r.latest));
+      var evs = r.events.filter(function(e){ return e.oleh !== S.me.username; });
+      if (evs.length){
+        beep(evs.some(function(e){ return e.tipe === 'daftar'; }) ? 'daftar' : 'patroli');
+        evs.slice(-3).forEach(function(e){ toast(e); });
+        osNotify(evs[evs.length - 1]);
+        if (S.tab === 'dash' && evs.some(function(e){ return e.tipe === 'patroli'; })) viewDash();
+      }
+    }
+    var cur = S.admin ? S.admin.users.filter(function(u){ return u.aktif === 'PENDING'; }).length : -1;
+    if (r.pending !== cur) call('adminList').then(function(a){ S.admin = a; badge(); }).catch(function(){});
+  }).catch(function(){ W.busy = false; });
+}
+function startWatch(){
+  stopWatch();
+  var s = lsGet('fbcf_since_' + S.me.username); W.since = s === null ? null : Number(s);
+  var b = $('bell'); b.classList.remove('hide'); b.textContent = sndOn() ? '🔔' : '🔕';
+  b.onclick = function(){
+    var on = !sndOn(); lsSet('fbcf_snd', on ? '1' : '0'); b.textContent = on ? '🔔' : '🔕';
+    if (on){
+      unlockAudio(); beep('patroli');
+      try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+    }
+  };
+  pollEvents(); W.timer = setInterval(pollEvents, 20000);
+}
+function stopWatch(){ if (W.timer) clearInterval(W.timer); W.timer = 0; W.busy = false; }
+document.addEventListener('visibilitychange', function(){ if (!document.hidden) pollEvents(); });
+
 function badge(){
   var n = (S.admin ? S.admin.users : []).filter(function(u){ return u.aktif === 'PENDING'; }).length, b = document.querySelector('#nav [data-t="usr"]');
   if (b) b.textContent = 'User' + (n ? ' (' + n + ' baru)' : '');
@@ -343,6 +427,7 @@ function sendAll(){
     if (i >= keys.length){
       P.sending = false;
       var n = Object.keys(P.sent).length;
+      call('finishPatrol', { count: n }).catch(function(){});
       $('main').innerHTML = '<div class="card"><h2>Patroli terkirim ✔</h2><p><b>' + n + '</b> titik berhasil dikirim.</p><button class="btn block" id="again">Patroli baru</button></div>';
       return $('again').onclick = function(){ var u = P.user; P = newP(u); viewScan(); };
     }
@@ -604,16 +689,22 @@ function renderUsr(){
       var p = pill[u.aktif] || ['none', esc(u.aktif)];
       return '<tr><td>' + esc(u.nama) + '<br><small style="color:var(--mute)">' + esc(u.username) + '</small></td><td>' + esc(u.role) + '</td>' +
         '<td><span class="pill ' + p[0] + '">' + p[1] + '</span></td>' +
-        '<td style="white-space:nowrap"><button class="btn sm sec" data-a="pin" data-u="' + esc(u.username) + '">Ubah PIN</button> ' +
+        '<td style="white-space:nowrap"><button class="btn sm" data-a="edit" data-u="' + esc(u.username) + '">Ubah</button> <button class="btn sm sec" data-a="pin" data-u="' + esc(u.username) + '">Ubah PIN</button> ' +
         '<button class="btn sm sec" data-a="tg" data-u="' + esc(u.username) + '">' + (u.aktif === 'YES' ? 'Cabut akses' : 'Aktifkan') + '</button></td></tr>';
     }).join('') + '</table></div>';
   $('addU').onclick = function(){
-    call('adminSaveUser', { username: $('uu').value, nama: $('un').value, role: $('ur').value, pin: $('up').value, aktif: 'YES' })
+    var uname = $('uu').value.trim().toLowerCase(), ex = all.filter(function(x){ return x.username === uname; })[0];
+    call('adminSaveUser', { username: $('uu').value, nama: $('un').value, role: $('ur').value, pin: $('up').value, aktif: ex && ex.aktif === 'NO' ? 'NO' : 'YES' })
       .then(function(a){ S.admin = a; renderUsr(); }).catch(function(e){ msg($('um'), e.message); });
   };
   $('main').onclick = function(e){
     var a = e.target.getAttribute('data-a'), un = e.target.getAttribute('data-u'); if (!a) return;
     var u = all.filter(function(x){ return x.username === un; })[0], req;
+    if (a === 'edit'){
+      $('uu').value = u.username; $('un').value = u.nama; $('ur').value = u.role; $('up').value = '';
+      $('um').innerHTML = '<div class="msg info">Mengubah ' + esc(u.username) + '. Ubah nama / role lalu tekan Simpan. Kosongkan PIN jika tidak ingin mengganti PIN.</div>';
+      $('un').scrollIntoView({ behavior: 'smooth', block: 'center' }); return $('un').focus();
+    }
     if (a === 'ok' || a === 'no'){
       req = call('adminApproveUser', un, a === 'ok' ? $('pr_' + un).value : '', a === 'ok');
     } else {
