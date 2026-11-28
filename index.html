@@ -8,6 +8,7 @@
 <style>
   :root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1b;--mute:#6b6a65;--line:#e4e2dc;--acc:#0f6b4f;--accbg:#e3f1ec;--bad:#b3261e;--badbg:#fbe7e5;--warn:#9a6700;--warnbg:#fff3d6}
   *{box-sizing:border-box}
+  html,body{overscroll-behavior-y:contain}   /* tarik layar ke bawah tidak me-reload halaman */
   body{margin:0;font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
   header{background:#17304f;color:#fff;padding:14px 16px 10px;position:sticky;top:0;z-index:10}
   header .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -360,7 +361,15 @@ window.addEventListener('popstate', function(){      /* tombol Back saat patroli
     var m = $('scanMsg'); if (m) msg(m, 'Patroli masih berjalan. Gunakan Kirim atau Batalkan untuk mengakhiri.', 'info');
   }
 });
-window.onbeforeunload = function(e){ if (Object.keys(P.done).length){ e.preventDefault(); e.returnValue = ''; return ''; } };
+/* Konfirmasi di dalam aplikasi (bukan dialog bawaan browser). Tombol utama = "Batal"/lanjut, jadi ketukan tidak sengaja tidak menghapus apa pun. */
+function ask(text, yesLabel, noLabel, onYes){
+  var m = document.createElement('div'); m.className = 'modal'; m.style.zIndex = 80;
+  m.innerHTML = '<div class="card"><p style="margin:0 0 14px"></p><button class="btn block" id="aNo"></button><button class="btn danger block" style="margin-top:8px" id="aYes"></button></div>';
+  m.querySelector('p').textContent = text; m.querySelector('#aNo').textContent = noLabel; m.querySelector('#aYes').textContent = yesLabel;
+  m.querySelector('#aNo').onclick = function(){ m.remove(); };
+  m.querySelector('#aYes').onclick = function(){ m.remove(); onYes(); };
+  document.body.appendChild(m);
+}
 
 function loadImg(file, max){
   return new Promise(function(res, rej){
@@ -488,15 +497,17 @@ function openPoint(k){
   };
   m.querySelector('#ms').onclick = function(){ it.photo = pend.photo; it.thumb = pend.thumb; it.note = m.querySelector('#mn').value; m.remove(); refreshPatrol(); };
   m.querySelector('#md').onclick = function(){
-    if (!confirm('Hapus scan "' + it.nama + '"?')) return;
-    delete P.done[k]; if (!Object.keys(P.done).length && !Object.keys(P.sent).length) P.started = null; m.remove(); refreshPatrol();
+    ask('Hapus scan "' + it.nama + '"?', 'Ya, hapus scan', 'Batal', function(){
+      delete P.done[k]; if (!Object.keys(P.done).length && !Object.keys(P.sent).length) P.started = null; m.remove(); refreshPatrol();
+    });
   };
 }
 
 function cancelPatrol(){
-  if (!confirm('Batalkan patroli ini? Semua scan, foto, dan catatan yang belum terkirim akan dihapus.')) return;
-  stopPing(); call('patrolEnd').catch(function(){});
-  clearSaved(); var u = P.user; P = newP(u); viewScan();
+  ask('Batalkan patroli ini? Semua scan, foto, dan catatan yang belum terkirim akan dihapus.', 'Ya, batalkan patroli', 'Lanjutkan patroli', function(){
+    stopPing(); call('patrolEnd').catch(function(){});
+    clearSaved(); var u = P.user; P = newP(u); viewScan();
+  });
 }
 
 function sendAll(){
