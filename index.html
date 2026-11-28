@@ -175,7 +175,7 @@ function showRegister(){
 }
 
 function start(r){
-  S.me = r.user; if (P.user !== r.user.username) P = newP(r.user.username); $('appName').textContent = r.appName;
+  S.me = r.user; if (P.user !== r.user.username) P = newP(r.user.username); loadP(); $('appName').textContent = r.appName;
   $('who').textContent = r.user.nama + ' · ' + r.user.role; $('out').classList.remove('hide');
   $('out').onclick = function(){ call('logout').catch(function(){}).then(function(){ showLogin(); }); };
   var tabs = [['scan','Patroli']];
@@ -184,7 +184,8 @@ function start(r){
   $('nav').innerHTML = tabs.map(function(t){ return '<button data-t="' + t[0] + '">' + t[1] + '</button>'; }).join('');
   $('nav').classList.remove('hide');
   $('nav').onclick = function(e){ var t = e.target.getAttribute('data-t'); if (t) go(t); };
-  go(r.user.role === 'petugas' ? 'scan' : 'dash');
+  go(r.user.role === 'petugas' || P.restored ? 'scan' : 'dash');
+  if (P.restored){ pingNow(); startPing(); }
   if (r.user.role === 'admin'){ call('adminList').then(function(a){ S.admin = a; badge(); }).catch(function(){}); startWatch(); } else stopWatch();
 }
 /* ---------- Notifikasi admin: bunyi + banner + notifikasi sistem ---------- */
@@ -325,6 +326,40 @@ function groupBy(list){
   });
   return order.map(function(k){ return { group: k, items: g[k] }; });
 }
+/* ---------- Simpan posisi patroli di HP (bertahan saat Back / tab tertutup / refresh) ---------- */
+var PKEY = function(u){ return 'fbcf_patrol_' + u; }, PMAX_AGE = 18 * 3600 * 1000, saveT = 0;
+function pActive(){ return Object.keys(P.done).length + Object.keys(P.sent).length > 0; }
+function clearSaved(){ clearTimeout(saveT); try { if (P.user) localStorage.removeItem(PKEY(P.user)); } catch (e) {} }
+function saveP(){
+  clearTimeout(saveT);
+  if (!P.user) return;
+  if (!pActive() || P.finished) return clearSaved();
+  var snap = function(withPhoto){
+    var d = {};
+    Object.keys(P.done).forEach(function(k){ var it = P.done[k]; d[k] = { nama: it.nama, time: it.time, note: it.note, lat: it.lat, lng: it.lng, photo: withPhoto ? it.photo : null, thumb: withPhoto ? it.thumb : null }; });
+    return JSON.stringify({ ts: Date.now(), started: P.started, cheer: P.cheer, done: d, sent: P.sent });
+  };
+  try { localStorage.setItem(PKEY(P.user), snap(true)); }
+  catch (e) { try { localStorage.setItem(PKEY(P.user), snap(false)); P.photoLost = true; } catch (e2) {} } // penyimpanan penuh: simpan tanpa foto
+}
+function saveSoon(){ clearTimeout(saveT); saveT = setTimeout(saveP, 400); }
+function loadP(){
+  if (!P.user || pActive()) return false;
+  try {
+    var d = JSON.parse(localStorage.getItem(PKEY(P.user)) || 'null');
+    if (!d || Date.now() - d.ts > PMAX_AGE) { clearSaved(); return false; }
+    P.done = d.done || {}; P.sent = d.sent || {}; P.started = d.started || null; P.cheer = d.cheer || 0;
+    P.restored = true; return pActive();
+  } catch (e) { return false; }
+}
+window.addEventListener('pagehide', saveP);
+document.addEventListener('visibilitychange', function(){ if (document.hidden) saveP(); });
+window.addEventListener('popstate', function(){      /* tombol Back saat patroli berjalan: tetap di aplikasi */
+  if (pActive() && !P.finished){
+    history.pushState({ fb: 1 }, '', location.href);
+    var m = $('scanMsg'); if (m) msg(m, 'Patroli masih berjalan. Gunakan Kirim atau Batalkan untuk mengakhiri.', 'info');
+  }
+});
 window.onbeforeunload = function(e){ if (Object.keys(P.done).length){ e.preventDefault(); e.returnValue = ''; return ''; } };
 
 function loadImg(file, max){
@@ -353,11 +388,17 @@ function viewScan(){
       var t = e.target; while (t && t !== this && !t.getAttribute('data-k')) t = t.parentNode;
       var k = t && t.getAttribute && t.getAttribute('data-k'); if (k && P.done[k]) openPoint(k);
     };
+    Object.keys(P.done).forEach(function(k){ if (!P.points.some(function(p){ return p.key === k; })) delete P.done[k]; });   /* titik yang sudah dihapus admin */
     refreshPatrol();
+    if (P.restored){
+      P.restored = false;
+      msg($('scanMsg'), 'Patroli sebelumnya dilanjutkan: ' + (Object.keys(P.done).length + Object.keys(P.sent).length) + ' dari ' + P.points.length + ' titik.' + (P.photoLost ? ' Sebagian foto tidak tersimpan, silakan ambil ulang.' : ''), 'info');
+    }
   }).catch(function(e){ $('main').innerHTML = '<div class="card"><div class="msg err">' + esc(e.message) + '</div></div>'; });
 }
 
 function refreshPatrol(){
+  saveSoon();
   if (!$('pTop')) return;
   var total = P.points.length, nd = Object.keys(P.done).length, ns = Object.keys(P.sent).length, scanned = nd + ns;
   $('pTop').innerHTML =
@@ -422,7 +463,8 @@ function onScan(text){
   if (navigator.vibrate) navigator.vibrate(80);
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(p){ it.lat = p.coords.latitude; it.lng = p.coords.longitude; }, function(){}, { timeout: 8000, maximumAge: 60000 });
   msg(m, '✔ ' + pt.nama + ' — ketuk kotak hijau jika ingin menambah foto atau catatan (opsional)', 'good');
-  refreshPatrol(); pingNow(); startPing(); checkCheer();
+  history.pushState({ fb: 1 }, '', location.href);
+  refreshPatrol(); pingNow(); startPing(); checkCheer(); saveSoon();
 }
 
 function openPoint(k){
@@ -454,7 +496,7 @@ function openPoint(k){
 function cancelPatrol(){
   if (!confirm('Batalkan patroli ini? Semua scan, foto, dan catatan yang belum terkirim akan dihapus.')) return;
   stopPing(); call('patrolEnd').catch(function(){});
-  var u = P.user; P = newP(u); viewScan();
+  clearSaved(); var u = P.user; P = newP(u); viewScan();
 }
 
 function sendAll(){
@@ -463,7 +505,7 @@ function sendAll(){
   var i = 0;
   (function next(){
     if (i >= keys.length){
-      P.sending = false;
+      P.sending = false; P.finished = true; clearSaved();
       var n = Object.keys(P.sent).length;
       call('finishPatrol', { count: n }).catch(function(){}); stopPing();
       $('main').innerHTML = '<div class="card"><h2>Patroli terkirim ✔</h2><p><b>' + n + '</b> titik berhasil dikirim.</p><button class="btn block" id="again">Patroli baru</button></div>';
